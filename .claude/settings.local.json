@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/Zakaria/TwinLinkV2 -type f -name *.json)",
+      "WebSearch"
+    ]
+  }
+}

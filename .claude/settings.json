@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:www.arcads.ai)",
+      "WebFetch(domain:superscale.ai)",
+      "Read(//c/Users/Zakaria/JourneymanApp/JourneyMan/apps/web//**)",
+      "Read(//c/Users/Zakaria/JourneymanApp/JourneyMan/apps/web/app/**)",
+      "Read(//c/Users/Zakaria/JourneymanApp/JourneyMan/apps/web/app/api/**)",
+      "Read(//c/Users/Zakaria/JourneymanApp/JourneyMan/apps/web/**)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src=no --import-alias=\"@/*\" --use-pnpm --turbopack)",
+      "Bash(npx create-next-app@latest twinlink --typescript --tailwind --eslint --app --src=no --import-alias=\"@/*\" --use-pnpm --turbopack)",
+      "Bash(npx create-next-app@latest twinlink --typescript --tailwind --eslint --app --src=no --import-alias=\"@/*\" --use-pnpm --turbopack --yes)",
+      "Bash(shopt -s dotglob)",
+      "Bash(mv twinlink/* .)",
+      "Bash(rm -rf twinlink TwinlinkV2)",
+      "Bash(pnpm add:*)",
+      "Bash(rm -rf node_modules)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm dlx:*)"
+    ]
+  }
+}

@@ -126,7 +126,7 @@ export default function AssetsPage() {
 
   return (
     <div
-      className="px-8 py-6 space-y-6 min-h-full"
+      className="px-4 sm:px-6 md:px-8 py-6 space-y-6 min-h-full"
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}

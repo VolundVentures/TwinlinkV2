@@ -73,7 +73,7 @@ export default function ProductsPage() {
 
   if (loading) {
     return (
-      <div className="px-8 py-6 space-y-8">
+      <div className="px-4 sm:px-6 md:px-8 py-6 space-y-8">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -91,7 +91,7 @@ export default function ProductsPage() {
   }
 
   return (
-    <div className="px-8 py-6 space-y-6">
+    <div className="px-4 sm:px-6 md:px-8 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

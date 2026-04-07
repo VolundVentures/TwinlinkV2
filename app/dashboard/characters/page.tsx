@@ -226,7 +226,7 @@ export default function CharactersPage() {
   });
 
   return (
-    <div className="px-8 py-6 bg-white min-h-screen space-y-8 pb-16">
+    <div className="px-4 sm:px-6 md:px-8 py-6 bg-white min-h-screen space-y-8 pb-16">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

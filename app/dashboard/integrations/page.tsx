@@ -73,7 +73,7 @@ export default function IntegrationsPage() {
   for (const conn of connections) connectionsByPlatform.set(conn.platform, conn);
 
   return (
-    <div className="px-8 py-6 space-y-8">
+    <div className="px-4 sm:px-6 md:px-8 py-6 space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-[28px] font-bold tracking-[-0.02em] text-[#1A1A1A]">Integrations</h1>

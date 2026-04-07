@@ -57,7 +57,7 @@ export function FrameCanvas() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
       <motion.div variants={staggerContainer} initial="hidden" animate="visible">
         {/* Header */}
         <motion.div variants={staggerItem} className="mb-8">
@@ -120,13 +120,13 @@ export function FrameCanvas() {
                 key={scene.id}
                 className="bg-white border border-[rgba(22,21,20,0.08)] rounded-xl p-5"
               >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <div className="flex items-center gap-3">
-                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-[#161514] text-white text-[11px] font-semibold">
+                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-[#161514] text-white text-[11px] font-semibold shrink-0">
                       {i + 1}
                     </span>
-                    <span className="text-[14px] font-medium text-[#161514]">{scene.title}</span>
-                    <span className="mono text-[11px] text-[#a3a3a3]">{scene.durationSeconds}s</span>
+                    <span className="text-[14px] font-medium text-[#161514] truncate">{scene.title}</span>
+                    <span className="mono text-[11px] text-[#a3a3a3] shrink-0">{scene.durationSeconds}s</span>
                   </div>
                   <motion.button
                     onClick={() => generateFrames(i)}
@@ -146,7 +146,7 @@ export function FrameCanvas() {
                   </motion.button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* First frame */}
                   <div>
                     <p className="label-caps text-[10px] mb-2">First Frame</p>

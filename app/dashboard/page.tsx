@@ -330,7 +330,7 @@ export default function DashboardPage() {
               Gallery <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
-          <div className="grid grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {gensWithThumbs.slice(0, 10).map((gen) => {
               const thumbUrl = getThumb(gen)!;
               const vid = gen.generation_assets.find((a) => a.type === "video" && a.public_url);
@@ -364,7 +364,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── Quick Links ── */}
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="grid grid-cols-3 gap-3">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         <Link href="/dashboard/calendar" className="rounded-xl border border-[#F0F0F0] bg-white p-4 hover:border-[#E5E7EB] hover:shadow-sm transition-all flex items-center gap-3 group">
           <CalendarDays className="h-5 w-5 text-[#9CA3AF] group-hover:text-[#1A1A1A] transition-colors" />
           <div>

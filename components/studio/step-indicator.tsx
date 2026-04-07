@@ -12,7 +12,7 @@ export function StepIndicator() {
   const current = state.currentStep;
 
   return (
-    <div className="flex items-center gap-1 px-6 py-4 overflow-x-auto">
+    <div className="flex items-center gap-1 px-3 sm:px-6 py-3 sm:py-4 overflow-x-auto scrollbar-hide">
       {STUDIO_STEPS.map(({ step, label }, i) => {
         const isActive = step === current;
         const isCompleted = step < current;
@@ -46,7 +46,7 @@ export function StepIndicator() {
                   {step}
                 </span>
               )}
-              <span>{label}</span>
+              <span className="hidden sm:inline">{label}</span>
             </button>
 
             {i < STUDIO_STEPS.length - 1 && (

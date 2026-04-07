@@ -716,7 +716,7 @@ export default function BrandDetailPage() {
   // Loading state
   if (loading) {
     return (
-      <div className="px-8 py-8 mx-auto max-w-4xl space-y-8 bg-white min-h-screen">
+      <div className="px-4 sm:px-6 md:px-8 py-8 mx-auto max-w-4xl space-y-8 bg-white min-h-screen">
         <Skeleton className="h-5 w-20 rounded-lg" />
         <div className="flex items-center gap-5">
           <Skeleton className="h-16 w-16 rounded-2xl" />
@@ -743,7 +743,7 @@ export default function BrandDetailPage() {
 
   return (
     <TooltipProvider>
-      <div className="px-8 py-8 mx-auto max-w-4xl space-y-10 pb-16 bg-white min-h-screen">
+      <div className="px-4 sm:px-6 md:px-8 py-8 mx-auto max-w-4xl space-y-10 pb-16 bg-white min-h-screen">
 
         {/* ================================================================== */}
         {/* Back link                                                          */}
@@ -1103,7 +1103,7 @@ export default function BrandDetailPage() {
 
               {/* Image Grid */}
               {images.length > 0 && (
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {images.slice(0, 20).map((imgUrl, i) => (
                     <a
                       key={i}

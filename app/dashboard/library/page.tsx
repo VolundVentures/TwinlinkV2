@@ -255,7 +255,7 @@ export default function LibraryPage() {
 
   if (loading) {
     return (
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 sm:px-6 md:px-8 py-6 space-y-6">
         <h1 className="text-[28px] font-bold text-[#1A1A1A]">Asset Library</h1>
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-6 w-6 animate-spin text-[#1A1A1A]" />
@@ -271,7 +271,7 @@ export default function LibraryPage() {
 
   if (error) {
     return (
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 sm:px-6 md:px-8 py-6 space-y-6">
         <h1 className="text-[28px] font-bold text-[#1A1A1A]">Asset Library</h1>
         <div className="flex flex-col items-center justify-center rounded-2xl border border-[#F0F0F0] bg-white py-16">
           <p className="text-[14px] font-medium text-[#1A1A1A]">{error}</p>
@@ -297,7 +297,7 @@ export default function LibraryPage() {
   // ---------- Render ----------
 
   return (
-    <div className="px-8 py-6 space-y-6">
+    <div className="px-4 sm:px-6 md:px-8 py-6 space-y-6">
       {/* Header row */}
       <div>
         <div className="flex items-start justify-between">

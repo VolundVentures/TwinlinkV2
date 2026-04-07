@@ -23,17 +23,17 @@ export function SceneRefinement() {
   }
 
   return (
-    <div className="h-full flex">
-      {/* Left: Scene list */}
-      <div className="w-64 border-r border-[rgba(22,21,20,0.06)] bg-white overflow-y-auto">
-        <div className="p-4">
-          <p className="label-caps text-[10px] mb-3">Scenes</p>
+    <div className="h-full flex flex-col md:flex-row">
+      {/* Scene selector — horizontal scroll on mobile, sidebar on desktop */}
+      <div className="md:w-64 border-b md:border-b-0 md:border-r border-[rgba(22,21,20,0.06)] bg-white overflow-x-auto md:overflow-x-visible md:overflow-y-auto shrink-0">
+        <div className="p-3 md:p-4 flex md:flex-col gap-1.5 md:gap-1">
+          <p className="label-caps text-[10px] mb-0 md:mb-3 hidden md:block">Scenes</p>
           {state.scenes.map((s, i) => (
             <button
               key={s.id}
               onClick={() => setActiveScene(i)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all mb-1",
+                "flex items-center gap-2 md:gap-3 px-3 py-2 md:py-2.5 rounded-lg text-left transition-all shrink-0 md:w-full",
                 activeScene === i
                   ? "bg-[#161514] text-white"
                   : "text-[#737373] hover:bg-[#F3F0EB]"
@@ -56,8 +56,8 @@ export function SceneRefinement() {
         </div>
       </div>
 
-      {/* Right: Scene detail */}
-      <div className="flex-1 overflow-y-auto p-8">
+      {/* Scene detail */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
         <motion.div
           key={activeScene}
           initial={{ opacity: 0, x: 16 }}
@@ -65,7 +65,7 @@ export function SceneRefinement() {
           transition={spring.smooth}
         >
           {/* Preview area */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
             <div className="aspect-video bg-black rounded-xl overflow-hidden relative group">
               {frame?.firstFrame ? (
                 <img src={frame.firstFrame.url} alt="" className="w-full h-full object-cover" />
@@ -124,7 +124,7 @@ export function SceneRefinement() {
               />
             </div>
 
-            <div className="flex gap-6">
+            <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
               <div className="flex-1">
                 <label className="label-caps text-[10px] mb-2 block">Duration (seconds)</label>
                 <input

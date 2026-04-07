@@ -48,7 +48,7 @@ export default function CampaignsPage() {
 
   if (loading) {
     return (
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 sm:px-6 md:px-8 py-6 space-y-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
             <div className="shimmer h-9 w-40 rounded-xl" />
@@ -56,7 +56,7 @@ export default function CampaignsPage() {
           </div>
           <div className="shimmer h-10 w-36 rounded-full" />
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[1,2,3,4].map(i => <div key={i} className="shimmer h-28 rounded-2xl" />)}
         </div>
         <div className="space-y-3">
@@ -71,9 +71,9 @@ export default function CampaignsPage() {
   const totalCredits = campaigns.reduce((s, c) => s + c.credits_used, 0);
 
   return (
-    <div className="px-8 py-6">
+    <div className="px-4 sm:px-6 md:px-8 py-6">
       {/* Header */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
         <div>
           <h1 className="text-[32px] font-bold tracking-[-0.02em] text-[#1A1A1A]">Campaigns</h1>
           <p className="text-[15px] text-[#6B7280] mt-1">Autonomous content production</p>
@@ -86,7 +86,7 @@ export default function CampaignsPage() {
 
       {/* Stats */}
       {campaigns.length > 0 && (
-        <div className="grid grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <div className="rounded-2xl border border-[#4D5D4B]/12 bg-[#4D5D4B]/[0.03] p-5">
             <p className="text-[11px] font-bold uppercase tracking-widest text-[#4D5D4B] mb-2">Active</p>
             <p className="text-[36px] font-bold text-[#1A1A1A] leading-none">{active.length}</p>

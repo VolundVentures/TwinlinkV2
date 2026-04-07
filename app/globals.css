@@ -555,3 +555,21 @@
     0 4px 12px rgba(0,0,0,0.06),
     0 12px 40px rgba(0,0,0,0.08);
 }
+
+/* ============================================
+   Scrollbar hide utility
+   ============================================ */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================
+   Safe area for mobile bottom nav
+   ============================================ */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

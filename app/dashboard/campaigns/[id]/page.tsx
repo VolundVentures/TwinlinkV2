@@ -186,7 +186,7 @@ export default function CampaignDetailPage() {
 
   if (loading) {
     return (
-      <div className="px-8 py-6 space-y-6">
+      <div className="px-4 sm:px-6 md:px-8 py-6 space-y-6">
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-64 w-full rounded-2xl" />
@@ -196,7 +196,7 @@ export default function CampaignDetailPage() {
 
   if (!campaign) {
     return (
-      <div className="px-8 py-6 text-center py-20">
+      <div className="px-4 sm:px-6 md:px-8 py-6 text-center py-20">
         <p className="text-[#6B7280]">Campaign not found.</p>
         <Link href="/dashboard/campaigns" className="text-[#4D5D4B] underline mt-2 inline-block">Back to campaigns</Link>
       </div>
@@ -543,7 +543,7 @@ export default function CampaignDetailPage() {
             {tab === "production" && (
               <div className="space-y-6">
                 {/* Progress overview */}
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {[
                     { label: "Queued", count: queuedItems.length, color: "text-[#9CA3AF]" },
                     { label: "Producing", count: activeItems.length, color: "text-[#D97706]" },

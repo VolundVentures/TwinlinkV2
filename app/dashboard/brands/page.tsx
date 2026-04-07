@@ -70,7 +70,7 @@ export default function BrandsPage() {
 
   if (loading) {
     return (
-      <div className="px-8 py-6 space-y-8">
+      <div className="px-4 sm:px-6 md:px-8 py-6 space-y-8">
         <div className="space-y-2">
           <div className="h-9 w-48 bg-[#F3F4F6] rounded-lg animate-pulse" />
           <div className="h-5 w-36 bg-[#F3F4F6] rounded-lg animate-pulse" />
@@ -95,7 +95,7 @@ export default function BrandsPage() {
   }
 
   return (
-    <div className="px-8 py-6 space-y-8">
+    <div className="px-4 sm:px-6 md:px-8 py-6 space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-[32px] font-bold text-[#1A1A1A] tracking-tight">Brands</h1>
@@ -105,7 +105,7 @@ export default function BrandsPage() {
       </div>
 
       {/* Add brand form */}
-      <form onSubmit={handleAddBrand} className="flex items-center gap-3">
+      <form onSubmit={handleAddBrand} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <input
           type="url"
           placeholder="https://your-brand.com"

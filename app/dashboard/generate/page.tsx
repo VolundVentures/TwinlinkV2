@@ -507,7 +507,7 @@ export default function GeneratePage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto" ref={scrollRef}>
-          <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
+          <div className="mx-auto max-w-2xl space-y-6 px-4 sm:px-6 py-6 sm:py-8">
             {/* Welcome */}
             {messages.length === 0 && !isRunning && (
               <div className="animate-fade-in">
@@ -726,7 +726,7 @@ export default function GeneratePage() {
         </div>
 
         {/* Input */}
-        <div className="px-6 py-4 bg-white border-t border-[#F0F0F0]">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 bg-white border-t border-[#F0F0F0]">
           <form onSubmit={handleSubmit} className="mx-auto">
             <div className="flex items-end gap-3 rounded-2xl border border-[#E5E7EB] bg-white px-5 py-4 shadow-[0_1px_6px_rgba(0,0,0,0.06)]">
               <textarea

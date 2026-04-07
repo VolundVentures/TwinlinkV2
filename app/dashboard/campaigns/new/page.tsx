@@ -189,7 +189,7 @@ export default function NewCampaignPage() {
         {/* Goals */}
         <motion.div variants={staggerItem}>
           <p className="text-[12px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-3">Goals</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {GOALS.map((goal) => {
               const Icon = goal.icon;
               const selected = goals.includes(goal.id);
@@ -240,7 +240,7 @@ export default function NewCampaignPage() {
         {/* Budget */}
         <motion.div variants={staggerItem}>
           <p className="text-[12px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-3">Budget</p>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {BUDGET_OPTIONS.map((opt) => (
               <button
                 key={opt.credits}
@@ -284,7 +284,7 @@ export default function NewCampaignPage() {
         {/* Content mix */}
         <motion.div variants={staggerItem}>
           <p className="text-[12px] font-bold uppercase tracking-wider text-[#9CA3AF] mb-3">Content Mix</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {CONTENT_MIX.map((mix) => (
               <button
                 key={mix.id}

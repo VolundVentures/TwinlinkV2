@@ -365,7 +365,7 @@ export default function CompetitorsPage() {
   }
 
   return (
-    <div className="px-8 py-6 space-y-8">
+    <div className="px-4 sm:px-6 md:px-8 py-6 space-y-8">
       {/* Page Title */}
       <div>
         <h1 className="text-[28px] font-bold text-[#1A1A1A]">{t.nav.competitors}</h1>

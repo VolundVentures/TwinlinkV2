@@ -753,7 +753,7 @@ export default function CalendarPage() {
               ) : recentAssets.length === 0 ? (
                 <p className="text-[14px] text-[#9CA3AF] py-4 text-center">No assets yet.</p>
               ) : (
-                <div className="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
                   {recentAssets.map((asset) => (
                     <button key={asset.id} onClick={() => setScheduleAssetId(scheduleAssetId === asset.id ? null : asset.id)}
                       className={cn("relative rounded-xl overflow-hidden aspect-square bg-[#F9FAFB] transition-all",

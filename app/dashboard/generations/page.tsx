@@ -79,7 +79,7 @@ function getCount(gens: Generation[], key: StatusFilter): number {
 /* ── Skeleton ── */
 function LoadingSkeleton() {
   return (
-    <div className="px-8 py-6 space-y-6">
+    <div className="px-4 sm:px-6 md:px-8 py-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
           <div className="shimmer h-8 w-32 rounded-xl" />
@@ -90,7 +90,7 @@ function LoadingSkeleton() {
       <div className="flex gap-2">
         {[60, 80, 80, 60].map((w, i) => <div key={i} className="shimmer h-9 rounded-full" style={{ width: w }} />)}
       </div>
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="rounded-2xl overflow-hidden">
             <div className="shimmer" style={{ height: [240, 300, 200, 280, 320, 220, 260, 340][i] }} />
@@ -272,9 +272,9 @@ export default function GenerationsPage() {
   const totalVideos = gensWithAssets.reduce((sum, g) => sum + g.generation_assets.filter((a) => a.type === "video").length, 0);
 
   return (
-    <div className="px-8 py-6">
+    <div className="px-4 sm:px-6 md:px-8 py-6">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-[32px] font-bold tracking-[-0.02em] text-[#1A1A1A]">Gallery</h1>
           <p className="text-[15px] text-[#6B7280] mt-1">
@@ -291,7 +291,7 @@ export default function GenerationsPage() {
 
       {/* Filter pills with colored dots */}
       {gensWithAssets.length > 0 && (
-        <div className="flex gap-2 mb-8">
+        <div className="flex gap-2 mb-8 overflow-x-auto pb-1">
           {FILTERS.map((f) => {
             const active = activeFilter === f.key;
             const count = getCount(gensWithAssets, f.key);

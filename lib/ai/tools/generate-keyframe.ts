@@ -30,13 +30,13 @@ export type KeyframeRole = "hero" | "first_frame" | "last_frame";
 export const generateKeyframeDefinition: ToolDefinition = {
   name: "generate_keyframe",
   description:
-    "Compose a cinematic still from plates via Nano Banana edit mode, using the STRUCTURED DP spec from write_script.\n\n" +
-    "**ALWAYS pass `shot_spec`** (from the script's `shots[i].shot_spec`) — verbatim, all fields. The structured spec is the only supported input; there is no legacy prose path.\n\n" +
-    "**ALWAYS pass `previous_shot_spec`** for every shot except the first — it enforces continuity (180° rule, eyeline, light match, 30° rule).\n\n" +
-    "**For `first_and_last` shots:** call twice — once role=first_frame, once role=last_frame with `shot_spec_end` carrying the delta.\n\n" +
-    "**Parallelism:** since `previous_shot_spec` is script metadata (not a rendered image), you can generate multiple keyframes IN PARALLEL — up to 5 at a time per turn. The user does not want to wait for keyframes to render one by one.\n\n" +
-    "**Automatic identity check:** after generation, the output is verified against the subject plate. If identity drifted, the tool regenerates once before returning.\n\n" +
-    "Costs 2 credits per call (+1 for identity verification).",
+    "Compose a cinematic still from plates via gpt_image_2 edit mode, using the STRUCTURED DP spec from write_script.\n\n" +
+    "**EASIEST PATH — just pass `shot_id` and `role`.** The tool will look up the matching shot's `shot_spec` from the script asset automatically. Do NOT rebuild the spec from memory — Sonnet has been observed shaping it wrong (camera fields nested, staging flattened) and looping. Trust the script.\n\n" +
+    "**Optional override:** if you genuinely want to deviate from the script's spec, you can pass `shot_spec` inline (VERBATIM all fields). If you pass an inline spec and it's incomplete, the tool falls back to the script's version.\n\n" +
+    "**Schema reminder (if you must pass inline):** three nested object fields — `staging: { camera_position, subject_action }`, `depth: { midground }`, `continuity: { match }`. Everything else is flat at shot_spec's top level: scale, lens_mm, angle, movement, subject_position, eye_direction, key_direction, key_quality, key_color_k, fill_ratio, purpose, mood, subject_plate.\n\n" +
+    "**For `first_and_last` shots:** call twice — once role=first_frame, once role=last_frame. The tool reads `shot_spec_end` from the script asset too.\n\n" +
+    "**Parallelism:** you can fire up to 5 generate_keyframe calls in parallel per turn — each shot is independent. Do not wait between turns.\n\n" +
+    "Costs 2 credits per call.",
   input_schema: {
     type: "object",
     properties: {
@@ -65,7 +65,7 @@ export const generateKeyframeDefinition: ToolDefinition = {
       },
       tag: { type: "string", description: "Optional explicit @tag; default '@kf_{shot_id}_{role}'." },
     },
-    required: ["shot_id", "role", "shot_spec", "aspect_ratio"],
+    required: ["shot_id", "role", "aspect_ratio"],
   },
 };
 
@@ -103,6 +103,45 @@ type DBPlate = {
   metadata: Record<string, unknown> | null;
 };
 
+// Pull the full shot record (with its shot_spec) from the persisted script
+// asset. This is the SOURCE OF TRUTH for the spec — it's what write_script
+// produced and persisted. Used to recover when the agent passes a partial /
+// reshaped spec (a recurring failure: Sonnet reconstructs the spec from
+// memory and gets the nesting wrong).
+async function fetchShotFromScript(
+  generationId: string,
+  shotId: string
+): Promise<{
+  shot_spec?: Partial<ShotSpec>;
+  shot_spec_end?: Partial<ShotSpec>;
+} | null> {
+  try {
+    const { data } = await db
+      .from("generation_assets")
+      .select("metadata")
+      .eq("generation_id", generationId)
+      .eq("type", "script")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const row = (data || [])[0];
+    if (!row) return null;
+    const meta = (row.metadata as Record<string, unknown>) || {};
+    const shots = (meta.shots as Array<Record<string, unknown>>) || [];
+    const match = shots.find((s) => s.id === shotId);
+    if (!match) return null;
+    return {
+      shot_spec: match.shot_spec as Partial<ShotSpec> | undefined,
+      shot_spec_end: match.shot_spec_end as Partial<ShotSpec> | undefined,
+    };
+  } catch (err) {
+    console.warn(
+      "[tool:generate_keyframe] script lookup failed (non-fatal):",
+      err instanceof Error ? err.message : String(err)
+    );
+    return null;
+  }
+}
+
 export const generateKeyframeTool: ToolHandler = async (
   input,
   context,
@@ -119,8 +158,8 @@ export const generateKeyframeTool: ToolHandler = async (
     | "3:4";
   const explicitTag = input.tag ? normalizeTag(input.tag as string) : undefined;
   const tag = explicitTag || `kf_${shotId}_${role}`;
-  const rawSpec = input.shot_spec as Partial<ShotSpec> | undefined;
-  const rawSpecEnd = input.shot_spec_end as Partial<ShotSpec> | undefined;
+  let rawSpec = input.shot_spec as Partial<ShotSpec> | undefined;
+  let rawSpecEnd = input.shot_spec_end as Partial<ShotSpec> | undefined;
   const rawPrevSpec = input.previous_shot_spec as Partial<ShotSpec> | undefined;
 
   if (!isValidTag(tag)) {
@@ -130,26 +169,55 @@ export const generateKeyframeTool: ToolHandler = async (
     };
   }
 
+  // RECOVERY PATH (added 2026-05-11): if the agent passes no spec OR an
+  // incomplete spec, fall back to the spec persisted on the script asset.
+  // Sonnet has been observed reconstructing shot_spec from memory after
+  // many turns and shaping it wrong (camera fields nested under camera,
+  // staging flattened, etc.). The script asset is the source of truth —
+  // pull from there before failing the call. Saves the loop where the
+  // agent fires 5 calls with the same wrong shape, gets 5 errors, fires
+  // 5 more with the same shape, etc.
+  if (!rawSpec || listMissingSpecFields(rawSpec).length > 0) {
+    const fromScript = await fetchShotFromScript(context.generationId, shotId);
+    if (fromScript?.shot_spec) {
+      const fromScriptMissing = listMissingSpecFields(fromScript.shot_spec);
+      if (fromScriptMissing.length === 0) {
+        console.info(
+          `[tool:generate_keyframe] recovered shot_spec for ${shotId} from script asset (agent's inline spec was ${rawSpec ? "incomplete" : "missing"})`
+        );
+        rawSpec = fromScript.shot_spec;
+        if (!rawSpecEnd && fromScript.shot_spec_end) {
+          rawSpecEnd = fromScript.shot_spec_end;
+        }
+      }
+    }
+  }
+
   if (!rawSpec) {
     return {
       success: false,
       content:
-        "generate_keyframe requires shot_spec. Pass the shot's shot_spec VERBATIM from write_script's output (not a summary, not a truncation). The legacy composition_prompt path has been removed.",
+        "generate_keyframe requires shot_spec, and no script asset was found for this generation. Run write_script first.",
     };
   }
 
   // Comprehensive up-front validation. Returns a single clear error listing
-  // every missing field so the agent can self-correct in one retry instead of
-  // looping through several partial attempts.
+  // every missing field. After the script-asset recovery above, getting here
+  // with missing fields means the script ITSELF is malformed (rare).
   const missing = listMissingSpecFields(rawSpec);
   if (missing.length > 0) {
     return {
       success: false,
       content:
-        `shot_spec is incomplete. Missing required field(s): ${missing.join(", ")}.\n\n` +
-        `Pass the shot's shot_spec VERBATIM from write_script's output. Do not truncate, do not paraphrase, do not drop fields to save tokens. ` +
-        `Every field in the spec is required because the keyframe prompt builder reads each one.\n\n` +
-        `If the script itself is missing these fields, call list_assets to re-fetch the treatment, or re-run write_script.`,
+        `shot_spec is incomplete after fallback recovery from the script asset. Missing field(s): ${missing.join(", ")}.\n\n` +
+        `**STOP firing generate_keyframe for this shot.** The script's shot_spec for ${shotId} is malformed — re-firing with hand-built specs will fail the same way. Instead:\n` +
+        `1. Call \`list_assets\` to inspect the current script.\n` +
+        `2. If the script's shot_spec for ${shotId} is genuinely incomplete, call \`write_script\` again with corrected creative_direction; do NOT keep retrying generate_keyframe with reconstructed specs.\n\n` +
+        `Required schema reminder — these THREE fields are NESTED objects, everything else is flat at shot_spec's top level:\n` +
+        `  • \`staging\`: { camera_position, subject_action }\n` +
+        `  • \`depth\`: { midground }\n` +
+        `  • \`continuity\`: { match }\n` +
+        `Flat top-level keys: scale, lens_mm, angle, movement, subject_position, eye_direction, key_direction, key_quality, key_color_k, fill_ratio, purpose, mood, subject_plate.`,
     };
   }
 

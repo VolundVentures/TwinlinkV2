@@ -193,6 +193,13 @@ export async function runAgentLoop(
   }
 
   let totalToolCalls = 0;
+  // Circuit breaker — track consecutive failures per tool name. If the same
+  // tool fails N turns in a row, abort. Stops the rampage where Sonnet keeps
+  // firing 5 generate_keyframe calls with the same wrong shape, gets 5
+  // errors, fires 5 more, etc. (observed in production with shot_spec
+  // shape mismatches before the script-asset fallback landed).
+  const consecutiveFailures: Record<string, number> = {};
+  const CONSECUTIVE_FAILURE_CAP = 3;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     // Client disconnected / user clicked Stop — bail out immediately so we
@@ -313,6 +320,86 @@ export async function runAgentLoop(
       role: "user",
       content: toolResultBlocks,
     });
+
+    // ── Circuit breaker — abort when one tool fails repeatedly ──────────
+    // After each turn, tally which tools failed across this turn's results.
+    // If every call to a given tool in this turn failed, increment that
+    // tool's consecutive-failure counter; if any call succeeded, reset to 0.
+    // Past the cap, break the loop with a clear message instead of letting
+    // Sonnet rampage another N turns making the same shape mistake.
+    {
+      const failedThisTurn = new Map<string, number>();
+      const totalThisTurn = new Map<string, number>();
+      for (const block of toolUseBlocks) {
+        totalThisTurn.set(
+          block.name,
+          (totalThisTurn.get(block.name) || 0) + 1
+        );
+      }
+      for (const result of toolResultBlocks) {
+        if (result.type !== "tool_result") continue;
+        const matchingUse = toolUseBlocks.find(
+          (b) => b.id === result.tool_use_id
+        );
+        if (!matchingUse) continue;
+        if (result.is_error) {
+          failedThisTurn.set(
+            matchingUse.name,
+            (failedThisTurn.get(matchingUse.name) || 0) + 1
+          );
+          continue;
+        }
+        // Some tools return success=false in content without is_error. The
+        // tool_progress events catch that path; here we approximate by
+        // looking for known error markers in the content string.
+        const content =
+          typeof result.content === "string"
+            ? result.content
+            : JSON.stringify(result.content || "");
+        if (
+          /\b(failed|incomplete|missing|unresolved|error)\b/i.test(
+            content.slice(0, 300)
+          ) &&
+          !/successfully|composed:|ready/i.test(content.slice(0, 300))
+        ) {
+          failedThisTurn.set(
+            matchingUse.name,
+            (failedThisTurn.get(matchingUse.name) || 0) + 1
+          );
+        }
+      }
+      for (const [name, total] of totalThisTurn.entries()) {
+        const fails = failedThisTurn.get(name) || 0;
+        if (fails > 0 && fails === total) {
+          consecutiveFailures[name] = (consecutiveFailures[name] || 0) + 1;
+          console.warn(
+            `[agent-loop] ${name} failed ${fails}/${total} this turn — consecutive failure ${consecutiveFailures[name]}/${CONSECUTIVE_FAILURE_CAP}`
+          );
+        } else {
+          if (consecutiveFailures[name]) {
+            console.log(
+              `[agent-loop] ${name} recovered — clearing consecutive failure counter`
+            );
+          }
+          consecutiveFailures[name] = 0;
+        }
+      }
+      const tripped = Object.entries(consecutiveFailures).find(
+        ([, count]) => count >= CONSECUTIVE_FAILURE_CAP
+      );
+      if (tripped) {
+        const [trippedName] = tripped;
+        const abortMsg =
+          `Stopped — \`${trippedName}\` failed every call across ${CONSECUTIVE_FAILURE_CAP} consecutive turns. ` +
+          `Re-firing the same shape would just fail again. Tell me what's wrong with the script or ask me to inspect the failing input, and I'll fix it before retrying.`;
+        console.error(
+          `[agent-loop] Circuit breaker tripped for ${trippedName} — aborting`
+        );
+        emitter.send("agent_message", { content: abortMsg });
+        emitter.send("error", { message: abortMsg });
+        break;
+      }
+    }
 
     // Checkpoint break: if the agent called request_approval, stop the loop.
     // The checkpoint_ready event was already emitted by the tool; the frontend

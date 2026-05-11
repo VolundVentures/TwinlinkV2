@@ -112,7 +112,8 @@
       "Bash(awk 'NR>=1162 && NR<=1222' \"c:/Users/Zakaria/TwinLinkV2/components/director/director-shell.tsx\")",
       "Bash(wait bqy9coan3 *)",
       "Bash(awk '/^\\\\?\\\\?/')",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

@@ -24,11 +24,13 @@ export const AdComposition: React.FC<AdCompositionProps> = ({
   clips,
   audio,
   backgroundMusic,
+  ambientSound,
   captions,
   textOverlays,
   brandWatermark,
   transition,
   filmGrain = true,
+  letterbox = "none",
   fps: propFps,
 }) => {
   const { fps } = useVideoConfig();
@@ -99,6 +101,28 @@ export const AdComposition: React.FC<AdCompositionProps> = ({
     return baseVolume;
   };
 
+  // Ambient bed: same fade rhythm as music but sits BELOW it in the mix.
+  // Default 0.18 so a single ambient track survives under VO (0.85) + music
+  // (0.15) without smearing the dialog. Fades in 1s (slightly slower than
+  // music so the ambient feels like the world fading up around the cut).
+  const ambientVolume = (frame: number): number => {
+    const baseVolume = ambientSound?.volume ?? 0.18;
+    const fadeInFrames = Math.round(fps * 1.0);
+    const fadeOutFrames = Math.round(fps * 2);
+
+    if (actualDurationFrames <= fadeInFrames + fadeOutFrames) {
+      return baseVolume;
+    }
+    const fadeOutStart = actualDurationFrames - fadeOutFrames;
+    if (frame < fadeInFrames) {
+      return interpolate(frame, [0, fadeInFrames], [0, baseVolume], { extrapolateRight: "clamp" });
+    }
+    if (frame >= fadeOutStart) {
+      return interpolate(frame, [fadeOutStart, actualDurationFrames], [baseVolume, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
+    }
+    return baseVolume;
+  };
+
   // Clip native audio volume based on clip type
   const getClipVolume = (clipIndex: number): number | ((frame: number) => number) => {
     const clip = clips[clipIndex];
@@ -136,6 +160,17 @@ export const AdComposition: React.FC<AdCompositionProps> = ({
         </Sequence>
       )}
 
+      {/* Ambient sound bed — room tone / location texture. Plays at a low
+          static volume beneath everything else. Fades in/out matching music
+          so the cut doesn't end abruptly. Loops automatically if the source
+          is shorter than the film (Remotion's <Audio> repeats when the
+          sequence outlives the underlying duration). */}
+      {ambientSound?.url && (
+        <Sequence from={0} durationInFrames={actualDurationFrames}>
+          <Audio src={ambientSound.url} volume={ambientVolume} loop />
+        </Sequence>
+      )}
+
       {/* Text overlays */}
       {textOverlays?.map((overlay, i) => (
         <Sequence key={`text-${i}`} from={overlay.startFrame} durationInFrames={overlay.endFrame - overlay.startFrame}>
@@ -153,7 +188,44 @@ export const AdComposition: React.FC<AdCompositionProps> = ({
 
       {/* Subtle film grain */}
       {filmGrain && <FilmGrainOverlay />}
+
+      {/* Anamorphic 2.39:1 letterbox bars — burned over 16:9 output */}
+      {letterbox === "2.39:1" && <LetterboxBars ratio={2.39} />}
     </AbsoluteFill>
+  );
+};
+
+// ============================================
+// Anamorphic letterbox bars
+// Crops the visible area to 2.39:1 by burning solid black bars top/bottom.
+// Used when the user wants a cinematic wide aspect on a 16:9 render.
+// ============================================
+const LetterboxBars: React.FC<{ ratio: number }> = ({ ratio }) => {
+  const { width, height } = useVideoConfig();
+  const targetHeight = width / ratio;
+  const barHeight = Math.max(0, Math.round((height - targetHeight) / 2));
+  if (barHeight <= 0) return null;
+  return (
+    <>
+      <AbsoluteFill
+        style={{
+          top: 0,
+          bottom: "auto",
+          height: barHeight,
+          backgroundColor: "#000",
+          pointerEvents: "none",
+        }}
+      />
+      <AbsoluteFill
+        style={{
+          top: "auto",
+          bottom: 0,
+          height: barHeight,
+          backgroundColor: "#000",
+          pointerEvents: "none",
+        }}
+      />
+    </>
   );
 };
 

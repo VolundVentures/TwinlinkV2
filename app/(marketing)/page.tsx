@@ -1,472 +1,293 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import Image from "next/image";
+import { useRef } from "react";
+import {
+  motion,
+  useScroll,
+  useTransform,
+  useReducedMotion,
+} from "framer-motion";
+import { ArrowRight, ArrowUpRight, Play } from "lucide-react";
 import { LandingNav } from "./components/landing-nav";
-import {
-  Reveal,
-  StaggerReveal,
-  StaggerItem,
-  AnimatedCounter,
-  Marquee,
-  Float,
-} from "./components/motion";
-import {
-  ImageIcon,
-  VideoIcon,
-  SearchIcon,
-  ZapIcon,
-  GlobeIcon,
-  SparklesIcon,
-  ArrowRight,
-  CheckIcon,
-  PlayIcon,
-  LayoutGridIcon,
-  BrainCircuitIcon,
-  TrendingUpIcon,
-  UsersIcon,
-  BarChart3Icon,
-  MousePointerClickIcon,
-  ChevronDownIcon,
-  MailIcon,
-  XIcon,
-} from "lucide-react";
-import { useState } from "react";
+import { Reveal, SplitHeading, Stagger, StaggerItem } from "./components/reveal";
+import { Marquee } from "./components/marquee";
+import { FilmTile } from "./components/film-tile";
+import { Cursor } from "./components/cursor";
+import { Magnetic } from "./components/magnetic";
+import { Counter } from "./components/counter";
+import { ScrollProgress } from "./components/scroll-progress";
+import { ScrollBadge } from "./components/scroll-badge";
+import { HorizontalGallery } from "./components/horizontal-gallery";
 
-/* ═══════════════════════════════════════════════
-   DATA
-   ═══════════════════════════════════════════════ */
-
-const features = [
-  {
-    icon: BrainCircuitIcon,
-    title: "AI Agent Workflow",
-    description:
-      "Chat with your creative agent. It researches, strategizes, generates, and iterates — all in real-time.",
-    span: "md:col-span-2",
-  },
-  {
-    icon: ImageIcon,
-    title: "Static Ad Creatives",
-    description:
-      "9+ scroll-stopping ad variations per run. Each with creative rationale, multiple formats, and instant download.",
-    span: "",
-  },
-  {
-    icon: VideoIcon,
-    title: "UGC Video Ads",
-    description:
-      "AI avatars deliver your script with realistic lip-sync in Arabic and English. Script to video in minutes.",
-    span: "",
-  },
-  {
-    icon: SearchIcon,
-    title: "Competitor Intelligence",
-    description:
-      "Scrape Meta Ad Library and Google Ads. AI scores competitor creatives and surfaces winning patterns.",
-    span: "",
-  },
-  {
-    icon: ZapIcon,
-    title: "Full Campaign Engine",
-    description:
-      "One prompt generates static + video + scripts + copy. Everything to launch across Meta, TikTok, and Snapchat.",
-    span: "",
-  },
-  {
-    icon: GlobeIcon,
-    title: "Arabic Native",
-    description:
-      "Full RTL interface, Arabic-speaking AI avatars, MSA + dialect voices. Built for MENA from day one.",
-    span: "md:col-span-2",
-  },
-];
-
-const steps = [
-  {
-    number: "01",
-    title: "Enter your brand URL",
-    description:
-      "AI scrapes your website and extracts brand identity — colors, products, voice, and audience — automatically.",
-    icon: MousePointerClickIcon,
-  },
-  {
-    number: "02",
-    title: "Choose your task",
-    description:
-      "Static ads, UGC videos, competitor research, or full campaigns. Select and configure in seconds.",
-    icon: LayoutGridIcon,
-  },
-  {
-    number: "03",
-    title: "Watch AI generate",
-    description:
-      "The agent streams its work in real-time. Research, creative strategy, image generation — visible step by step.",
-    icon: SparklesIcon,
-  },
-  {
-    number: "04",
-    title: "Download & launch",
-    description:
-      "Preview in Feed, Reels, Story, and Display formats. Download and push to Meta, TikTok, or Snapchat.",
-    icon: ArrowRight,
-  },
-];
-
-const metrics = [
-  { value: 10, suffix: "x", label: "Faster than agencies" },
-  { value: 90, suffix: "%", label: "Cost reduction" },
-  { value: 50, suffix: "K+", label: "Ads generated" },
-  { value: 4.9, suffix: "/5", label: "User rating", decimals: 1 },
-];
-
-const testimonials = [
-  {
-    name: "Sarah M.",
-    role: "Head of Growth",
-    company: "D2C Brand",
-    quote:
-      "We replaced our creative agency entirely. 10x the output at a fraction of the cost. Our ROAS improved by 340% in the first month.",
-    metric: "340% ROAS increase",
-  },
-  {
-    name: "Ahmed K.",
-    role: "Marketing Director",
-    company: "Tech Startup",
-    quote:
-      "The Arabic-native support is a game changer. Finally an AI tool that understands MENA markets and produces creatives that actually resonate.",
-    metric: "5x engagement in MENA",
-  },
-  {
-    name: "Lisa R.",
-    role: "Performance Marketer",
-    company: "Growth Agency",
-    quote:
-      "From brand URL to launch-ready ads in under 2 minutes. My team can't believe it. We've scaled from 10 to 200 clients without hiring.",
-    metric: "20x client capacity",
-  },
-  {
-    name: "Omar S.",
-    role: "Founder & CEO",
-    company: "E-commerce",
-    quote:
-      "The competitor intelligence alone is worth the subscription. We spot winning ad patterns before our competition can react.",
-    metric: "2 weeks ahead of market",
-  },
-];
-
-const comparisons = [
-  { feature: "Brand to ad creative", old: "3-5 days", new: "2 minutes" },
-  { feature: "Cost per campaign", old: "$2,000-$10,000", new: "From $0" },
-  { feature: "Ad variations", old: "3-5 per cycle", new: "9+ per run" },
-  { feature: "Video ads with avatars", old: "Not available", new: "Included" },
-  { feature: "Competitor research", old: "Manual, weekly", new: "AI-powered, instant" },
-  { feature: "Arabic support", old: "Extra cost", new: "Native, built-in" },
-];
-
-const useCases = [
-  {
-    title: "E-commerce Brands",
-    description: "Generate product ads, seasonal campaigns, and retargeting creatives at scale.",
-    icon: BarChart3Icon,
-    stats: "Average 4.2x ROAS improvement",
-  },
-  {
-    title: "Marketing Agencies",
-    description: "Scale your creative output without scaling your team. Serve more clients, faster.",
-    icon: UsersIcon,
-    stats: "Handle 10x more clients",
-  },
-  {
-    title: "Startups & Apps",
-    description: "Launch fast with AI-generated creatives. Test more, learn faster, grow quicker.",
-    icon: TrendingUpIcon,
-    stats: "60% faster time-to-market",
-  },
-  {
-    title: "MENA Businesses",
-    description: "Native Arabic support with cultural awareness. RTL layouts, local dialects, and relevant imagery.",
-    icon: GlobeIcon,
-    stats: "3x engagement vs translated ads",
-  },
-];
-
-const integrations = [
-  "Meta Ads",
-  "Google Ads",
-  "TikTok Ads",
-  "Snapchat Ads",
-  "Instagram",
-  "YouTube",
-  "LinkedIn",
-  "X (Twitter)",
-];
-
-const faqItems = [
-  {
-    q: "How does TwinLink generate ads?",
-    a: "TwinLink uses an AI agent workflow. You provide your brand URL, and our AI scrapes your website to understand your brand identity, products, and audience. It then generates strategic ad creatives with multiple variations, formats, and creative rationales — all in real-time.",
-  },
-  {
-    q: "What types of ads can I create?",
-    a: "Static image ads (feed, story, display formats), UGC-style video ads with AI avatars and lip-sync, and full campaign packages that include copy, scripts, images, and videos. All optimized for Meta, TikTok, Snapchat, and more.",
-  },
-  {
-    q: "Is Arabic support truly native?",
-    a: "Yes. TwinLink was built for MENA from day one. We support full RTL interfaces, MSA and dialect-specific Arabic voices, Arabic-speaking AI avatars, and culturally relevant creative generation. It's not a translation layer — it's native.",
-  },
-  {
-    q: "How does competitor intelligence work?",
-    a: "Our AI scrapes Meta Ad Library and Google Ads Transparency Center to find your competitors' active ads. It then scores and analyzes each creative, surfacing winning patterns, messaging strategies, and visual trends you can leverage.",
-  },
-  {
-    q: "Can I use my own brand guidelines?",
-    a: "Absolutely. While our AI can auto-extract brand identity from your URL, you can also upload brand guidelines, color palettes, fonts, and tone-of-voice documents. The AI respects your brand system across all generated creatives.",
-  },
-  {
-    q: "What's the credit system?",
-    a: "Credits are used for generation tasks. Static ads cost fewer credits, video ads cost more. Free plan includes 500 credits, Pro includes 5,000/month, and Enterprise is unlimited. Unused credits don't roll over.",
-  },
-];
-
-const footerLinks = {
-  Product: ["Features", "Pricing", "Use Cases", "Integrations", "Changelog"],
-  Resources: ["Documentation", "API Reference", "Blog", "Help Center"],
-  Company: ["About", "Careers", "Press", "Contact"],
-  Legal: ["Privacy", "Terms", "Security"],
+// Real assets shipping with the build. Posters are intentionally undefined —
+// the gradient + grain fallback renders while the video loads, matching the
+// editorial "Monolith Gallery" intent.
+const A = {
+  heroVideo: "/videos/grizzlies.mp4",
+  films: [
+    {
+      src: "/videos/grizzlies.mp4",
+      label: "Short film · Anamorphic",
+      title: "Grizzlies",
+      meta: "AI short · 21:9 · Noir",
+      aspect: "aspect-[16/9]",
+    },
+    {
+      src: "/videos/dream-big.mp4",
+      label: "Brand film · Aspirational",
+      title: "Dream Big",
+      meta: "60s · 16:9 · Editorial",
+      aspect: "aspect-[4/5]",
+    },
+    {
+      src: "/videos/garage-pizza.mp4",
+      label: "Hospitality · Documentary",
+      title: "Garage Pizza",
+      meta: "90s · 16:9 · Vérité",
+      aspect: "aspect-[3/4]",
+    },
+    {
+      src: "/videos/runway-android.mp4",
+      label: "Tech · Product film",
+      title: "Now on Android",
+      meta: "30s · 9:16 · Hero",
+      aspect: "aspect-[3/4]",
+    },
+  ],
+  split: "/videos/dream-big.mp4",
+  closing: "/videos/garage-pizza.mp4",
 };
 
-/* ═══════════════════════════════════════════════
-   PAGE
-   ═══════════════════════════════════════════════ */
+// Featured directors surfaced in the casting strip. These match
+// /lib/directors/personas — keep the slugs in sync if you swap personas.
+const FEATURED_DIRECTORS = [
+  { id: "yuki-sato", name: "Yuki Sato", school: "Hong Kong romantic atmospherics" },
+  { id: "marcel-vrai", name: "Marcel Vraí", school: "French New Wave" },
+  { id: "nadia-camillo", name: "Nadia Camillo", school: "Italian neorealism" },
+  { id: "kaito-mori", name: "Kaito Mori", school: "Tokyo street poetics" },
+  { id: "edgar-loomis", name: "Edgar Loomis", school: "American gothic" },
+  { id: "zara-okafor", name: "Zara Okafor", school: "Lagos magic realism" },
+  { id: "henrik-aalto", name: "Henrik Aalto", school: "Nordic minimalism" },
+  { id: "catarina-reis", name: "Catarina Reis", school: "Iberian melodrama" },
+];
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white text-black overflow-x-hidden">
+    <div className="min-h-screen bg-white text-neutral-900 selection:bg-neutral-900 selection:text-white">
+      <Cursor />
+      <ScrollProgress />
       <LandingNav />
-
       <HeroSection />
-      <LogoBar />
-      <MetricsSection />
-      <FeaturesSection />
-      <HowItWorksSection />
-      <ComparisonSection />
-      <UseCasesSection />
-      <TestimonialsSection />
-      <IntegrationsSection />
+      <KeywordMarquee />
+      <ManifestoSection />
+      <CastingSection />
+      <ReelSection />
+      <InsideStudioSection />
+      <MethodSection />
+      <SplitFeatureSection />
+      <DisciplinesMarquee />
+      <QuoteSection />
       <PricingSection />
-      <FAQSection />
-      <FinalCTA />
+      <ClosingSection />
       <Footer />
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════
-   HERO
-   ═══════════════════════════════════════════════ */
-
-function HeroSection() {
+function InsideStudioSection() {
   return (
-    <section className="relative flex min-h-[100vh] flex-col items-center justify-center px-6 pt-20 pb-0 overflow-hidden">
-      {/* Grid pattern background */}
-      <div className="landing-grid-bg absolute inset-0" />
+    <HorizontalGallery
+      panels={[
+        {
+          label: "Casting",
+          title: "Cast your director.",
+          body:
+            "Twenty fictional auteurs, each with a school of cinema, a voice, and a body of work. Pick one or two — they show up as talking-head avatars and direct with you in real time.",
+          meta: "01 · Cast",
+          poster: "/directors/yuki-sato.png",
+        },
+        {
+          label: "Treatment",
+          title: "They pitch you back.",
+          body:
+            "One image becomes a treatment — location, color script, camera language, the music in their head. Approve it or push back. They argue for the film they want to make.",
+          meta: "02 · Treatment",
+          video: "/videos/dream-big.mp4",
+        },
+        {
+          label: "Plates & Keyframes",
+          title: "Frames before motion.",
+          body:
+            "Identity-locked plates of cast, locations, wardrobe, props. Composited into stills before any second of motion is rendered. Cannes-tier craft is decided here, not in the prompt.",
+          meta: "03 · Keyframes",
+          video: "/videos/grizzlies.mp4",
+        },
+        {
+          label: "The Cut",
+          title: "Scored, graded, shipped.",
+          body:
+            "Every approved frame becomes a directed shot. Cut, scored, grain pass, LUT, letterbox. Mastered at 4K and exported for any aspect, any channel — without leaving the tab.",
+          meta: "04 · Cut",
+          video: "/videos/garage-pizza.mp4",
+        },
+      ]}
+    />
+  );
+}
 
-      {/* Radial glow */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[800px] w-[1000px] rounded-full blur-3xl opacity-40"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(0,0,0,0.04) 0%, transparent 70%)",
-        }}
-      />
+/* =========================================================================
+   HERO — fullbleed autoplay video, massive serif, parallax mask
+   ========================================================================= */
+function HeroSection() {
+  const ref = useRef<HTMLElement>(null);
+  const reduce = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start start", "end start"],
+  });
+  const videoY = useTransform(scrollYProgress, [0, 1], ["0%", "25%"]);
+  const videoScale = useTransform(scrollYProgress, [0, 1], [1, 1.12]);
+  const textY = useTransform(scrollYProgress, [0, 1], ["0%", "-40%"]);
+  const overlayOpacity = useTransform(scrollYProgress, [0, 1], [0.35, 0.75]);
 
-      <div className="relative mx-auto max-w-5xl text-center">
-        {/* Headline */}
-        <Reveal delay={0.05}>
-          <h1 className="text-[3.5rem] font-bold leading-[1.02] tracking-[-0.04em] sm:text-[5rem] lg:text-[6.5rem]">
-            Create ads that
-            <br />
-            <span className="text-[#4F6247]">actually convert.</span>
-          </h1>
-        </Reveal>
-
-        {/* Subtitle */}
-        <Reveal delay={0.15}>
-          <p className="mx-auto mt-8 max-w-2xl text-[18px] sm:text-[20px] leading-relaxed text-black/45">
-            From brand URL to launch-ready static ads, UGC videos, and full
-            campaigns in minutes. Your AI creative partner that 10x&apos;s your
-            team&apos;s output.
-          </p>
-        </Reveal>
-
-        {/* CTAs */}
-        <Reveal delay={0.25}>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/signup">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="inline-flex items-center gap-2.5 rounded-full bg-[#4F6247] px-8 py-4 text-[15px] font-medium text-white shadow-lg transition-all hover:bg-[#3d4a3b] hover:shadow-xl"
-              >
-                Start creating for free
-                <ArrowRight className="h-4 w-4" />
-              </motion.button>
-            </Link>
-            <Link href="#how-it-works">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="inline-flex items-center gap-2.5 rounded-full border border-black/10 bg-white px-8 py-4 text-[15px] font-medium text-black/60 transition-colors hover:text-black hover:border-black/20"
-              >
-                <PlayIcon className="h-4 w-4" />
-                See how it works
-              </motion.button>
-            </Link>
-          </div>
-        </Reveal>
-
-        {/* Micro-copy */}
-        <Reveal delay={0.35}>
-          <p className="mt-5 text-[13px] text-black/25 tracking-wide">
-            500 free credits &middot; No credit card required &middot; Setup in
-            30 seconds
-          </p>
-        </Reveal>
-      </div>
-
-      {/* Preview window */}
-      <Reveal delay={0.45} className="relative mt-16 w-full max-w-6xl mx-auto px-4">
-        <div className="relative">
-          {/* Glow behind the window */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -inset-4 rounded-3xl bg-gradient-to-b from-black/[0.03] to-transparent blur-2xl"
-          />
-
-          {/* Browser window mockup */}
-          <div className="relative rounded-2xl border border-black/[0.08] bg-white shadow-2xl overflow-hidden">
-            {/* Title bar */}
-            <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
-              <div className="flex gap-1.5">
-                <div className="h-3 w-3 rounded-full bg-black/10" />
-                <div className="h-3 w-3 rounded-full bg-black/10" />
-                <div className="h-3 w-3 rounded-full bg-black/10" />
-              </div>
-              <div className="mx-auto flex items-center gap-2 rounded-lg bg-black/[0.03] px-4 py-1">
-                <div className="h-3 w-3 rounded-sm bg-black/10" />
-                <span className="text-[12px] text-black/30 font-medium">
-                  app.twinlink.ai
-                </span>
-              </div>
-              <div className="w-[52px]" />
-            </div>
-
-            {/* Content area */}
-            <div className="relative aspect-[16/9] max-h-[500px] bg-gradient-to-br from-neutral-50 to-neutral-100 p-6 sm:p-10">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full">
-                {/* Sidebar */}
-                <div className="hidden md:block md:col-span-3 space-y-3">
-                  <div className="h-8 w-3/4 rounded-lg bg-black/[0.06]" />
-                  <div className="space-y-2 mt-6">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="h-10 rounded-lg bg-black/[0.04]" />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Main content */}
-                <div className="md:col-span-6 space-y-4">
-                  <div className="flex items-center gap-3 mb-6">
-                    <div className="h-8 w-8 rounded-full bg-black/[0.08]" />
-                    <div className="space-y-1.5">
-                      <div className="h-3 w-32 rounded bg-black/[0.1]" />
-                      <div className="h-2 w-20 rounded bg-black/[0.05]" />
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="rounded-xl bg-white border border-black/[0.06] p-4 shadow-sm max-w-[80%]">
-                      <div className="space-y-2">
-                        <div className="h-2.5 w-full rounded bg-black/[0.08]" />
-                        <div className="h-2.5 w-3/4 rounded bg-black/[0.06]" />
-                      </div>
-                    </div>
-                    <div className="rounded-xl bg-black/[0.03] border border-black/[0.05] p-4 max-w-[85%] ml-auto">
-                      <div className="space-y-2">
-                        <div className="h-2.5 w-full rounded bg-black/[0.06]" />
-                        <div className="h-2.5 w-2/3 rounded bg-black/[0.04]" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right panel */}
-                <div className="hidden md:block md:col-span-3 space-y-3">
-                  <div className="h-4 w-2/3 rounded bg-black/[0.07] mb-4" />
-                  <Float amplitude={4} duration={5}>
-                    <div className="aspect-[4/5] rounded-xl bg-gradient-to-br from-neutral-100 to-neutral-200 border border-black/[0.06] shadow-sm" />
-                  </Float>
-                  <div className="grid grid-cols-2 gap-2 mt-3">
-                    <div className="aspect-square rounded-lg bg-black/[0.04]" />
-                    <div className="aspect-square rounded-lg bg-black/[0.06]" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Reveal>
-
-      {/* Scroll indicator */}
-      <Reveal delay={0.6}>
+  return (
+    <section
+      ref={ref}
+      className="relative h-[100svh] min-h-[680px] w-full overflow-hidden bg-black text-white"
+    >
+      {/* Video */}
+      <motion.div
+        style={reduce ? undefined : { y: videoY, scale: videoScale }}
+        className="absolute inset-0"
+      >
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 80% at 30% 20%, rgba(255,255,255,0.08), transparent 55%), linear-gradient(180deg, #111 0%, #000 100%)",
+          }}
+        />
+        <video
+          src={A.heroVideo}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 h-full w-full object-cover grayscale"
+        />
         <motion.div
-          className="mt-12 mb-8 flex flex-col items-center gap-2"
-          animate={{ y: [0, 6, 0] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          aria-hidden
+          className="absolute inset-0 bg-black"
+          style={{ opacity: overlayOpacity }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 90% at 50% 45%, transparent 40%, rgba(0,0,0,0.7) 100%)",
+          }}
+        />
+      </motion.div>
+
+      {/* Foreground */}
+      <motion.div
+        style={reduce ? undefined : { y: textY }}
+        className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-between px-6 pt-28 pb-10"
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center gap-3"
         >
-          <span className="text-[11px] text-black/20 tracking-widest uppercase">
-            Scroll
-          </span>
-          <ChevronDownIcon className="h-4 w-4 text-black/15" />
+          <span className="h-2 w-2 rounded-full bg-white animate-pulse-dot" />
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-white/80">
+            TwinLink · Cast a director. Make a film.
+          </p>
         </motion.div>
-      </Reveal>
+
+        <div className="max-w-6xl">
+          <h1 className="font-serif text-[13vw] leading-[0.9] tracking-tight md:text-[150px] lg:text-[180px]">
+            <SplitHeading text="Direct" />
+            <br />
+            <span className="italic text-white/70">
+              <SplitHeading text="cinema." delay={0.1} />
+            </span>
+          </h1>
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-10 max-w-xl font-serif text-[17px] leading-relaxed text-white/80"
+          >
+            TwinLink is a creative studio behind a new generation of mini-films and
+            commercials. Cast a fictional auteur, brief them, and direct frame by
+            frame — Cannes-tier craft, without the agency.
+          </motion.p>
+        </div>
+
+        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="flex flex-wrap items-center gap-3"
+          >
+            <Magnetic strength={0.3}>
+              <Link
+                href="/login"
+                data-cursor="hover"
+                className="group inline-flex h-14 cursor-pointer items-center gap-3 bg-white px-7 font-mono text-[11px] uppercase tracking-[0.22em] text-neutral-900 transition-colors hover:bg-neutral-200"
+              >
+                Sign in
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+            </Magnetic>
+            <Magnetic strength={0.3}>
+              <a
+                href="#reel"
+                data-cursor="hover"
+                className="group inline-flex h-14 items-center gap-3 border border-white/30 px-7 font-mono text-[11px] uppercase tracking-[0.22em] text-white/90 transition-colors hover:border-white hover:text-white"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                Watch the reel
+              </a>
+            </Magnetic>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 1.1, duration: 1, ease: [0.22, 1, 0.36, 1] }}
+            className="hidden md:block"
+          >
+            <ScrollBadge size={124} />
+          </motion.div>
+        </div>
+      </motion.div>
     </section>
   );
 }
 
-/* ═══════════════════════════════════════════════
-   LOGO BAR
-   ═══════════════════════════════════════════════ */
-
-function LogoBar() {
-  const logos = [
-    "Meta",
-    "Google",
-    "TikTok",
-    "Snapchat",
-    "Amazon",
-    "Shopify",
-    "Notion",
-    "Linear",
-    "Vercel",
-    "Stripe",
-  ];
-
+/* =========================================================================
+   KEYWORD MARQUEE
+   ========================================================================= */
+function KeywordMarquee() {
+  const words = ["Cast", "Treat", "Compose", "Direct", "Cut", "Deliver"];
   return (
-    <section className="border-y border-black/[0.05] py-10">
-      <Reveal>
-        <p className="label-caps mb-8 text-center">
-          Trusted by forward-thinking brands
-        </p>
-      </Reveal>
-      <Marquee speed={25}>
-        {logos.map((name) => (
-          <span
-            key={name}
-            className="text-[15px] font-semibold tracking-[0.15em] text-black/[0.12] uppercase whitespace-nowrap select-none"
-          >
-            {name}
+    <section className="border-b border-neutral-200 bg-white py-10">
+      <Marquee speed={45}>
+        {words.map((w, i) => (
+          <span key={`${w}-${i}`} className="flex items-center">
+            <span className="px-10 font-serif text-[52px] tracking-tight text-neutral-900 md:text-[84px]">
+              {w}
+            </span>
+            <span className="text-[24px] text-neutral-300">✦</span>
           </span>
         ))}
       </Marquee>
@@ -474,749 +295,980 @@ function LogoBar() {
   );
 }
 
-/* ═══════════════════════════════════════════════
-   METRICS
-   ═══════════════════════════════════════════════ */
-
-function MetricsSection() {
+/* =========================================================================
+   MANIFESTO
+   ========================================================================= */
+function ManifestoSection() {
   return (
-    <section className="px-6 py-24">
-      <div className="mx-auto max-w-5xl">
-        <StaggerReveal className="grid grid-cols-2 gap-8 md:grid-cols-4">
-          {metrics.map((m) => (
-            <StaggerItem key={m.label} className="text-center">
-              <div className="text-[3rem] sm:text-[4rem] font-bold tracking-[-0.04em] leading-none">
-                <AnimatedCounter
-                  to={m.value}
-                  suffix={m.suffix}
-                  decimals={m.decimals ?? 0}
-                />
-              </div>
-              <p className="mt-2 text-[14px] text-black/40">{m.label}</p>
-            </StaggerItem>
-          ))}
-        </StaggerReveal>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════
-   FEATURES — Bento Grid
-   ═══════════════════════════════════════════════ */
-
-function FeaturesSection() {
-  return (
-    <section
-      id="features"
-      className="relative overflow-hidden bg-[#0A0A0A] px-6 py-28 text-white"
-    >
-      <div className="landing-dot-bg absolute inset-0 opacity-[0.15]" />
-
-      <div className="relative mx-auto max-w-6xl">
+    <section id="manifesto" className="relative bg-white py-32 md:py-40">
+      <div className="mx-auto max-w-6xl px-6">
         <Reveal>
-          <div className="mb-16 text-center">
-            <p className="label-caps mb-4 text-white/25">Platform</p>
-            <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] lg:text-[4rem] leading-[1.05]">
-              Everything you need to
-              <br />
-              <span className="text-white/30">create winning ads</span>
-            </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-[17px] leading-relaxed text-white/35">
-              One AI platform replaces your entire creative stack. Research,
-              strategy, generation, and optimization — unified.
-            </p>
-          </div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500">
+            [01] Manifesto
+          </p>
         </Reveal>
-
-        <StaggerReveal className="grid gap-4 md:grid-cols-4" stagger={0.06}>
-          {features.map((feature) => (
-            <StaggerItem key={feature.title} className={feature.span}>
-              <motion.div
-                whileHover={{ y: -4, borderColor: "rgba(255,255,255,0.15)" }}
-                transition={{ duration: 0.2 }}
-                className="group relative h-full rounded-2xl border border-white/[0.07] bg-white/[0.02] p-7 transition-colors"
-              >
-                <div
-                  className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                  style={{
-                    background:
-                      "radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.04) 0%, transparent 60%)",
-                  }}
-                />
-                <div className="relative">
-                  <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-[#4F6247]/20 border border-[#4F6247]/10">
-                    <feature.icon className="h-5 w-5 text-[#8BA686]" />
-                  </div>
-                  <h3 className="text-[16px] font-semibold tracking-tight text-white">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-2.5 text-[14px] leading-relaxed text-white/30">
-                    {feature.description}
-                  </p>
+        <div className="mt-10 grid grid-cols-1 gap-12 md:grid-cols-12 md:gap-10">
+          <div className="md:col-span-7">
+            <h2 className="font-serif text-[40px] leading-[1.05] tracking-tight text-neutral-900 md:text-[72px]">
+              <SplitHeading text="We don't generate clips." />
+              <br />
+              <span className="italic text-neutral-400">
+                <SplitHeading text="We direct films." delay={0.1} />
+              </span>
+            </h2>
+          </div>
+          <div className="md:col-span-5 md:pt-6">
+            <Stagger className="space-y-6">
+              <StaggerItem>
+                <p className="font-serif text-[17px] leading-[1.7] text-neutral-700">
+                  Most AI tools type a prompt and pray. We treat every film like a shoot —
+                  with a director on call, a treatment, a cast, blocked scenes, composed
+                  frames, and a color script. Craft, not slot-machine.
+                </p>
+              </StaggerItem>
+              <StaggerItem>
+                <p className="font-serif text-[17px] leading-[1.7] text-neutral-700">
+                  Cast a fictional auteur. Lock identity once, reuse forever. Your cast,
+                  your locations, your brand — engineered as plates that never drift.
+                  Approve each stage. Ship when it&apos;s yours.
+                </p>
+              </StaggerItem>
+              <StaggerItem>
+                <div className="pt-4">
+                  <a
+                    href="#method"
+                    className="group inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.22em] text-neutral-900"
+                  >
+                    <span className="border-b border-neutral-900 pb-0.5">
+                      Read the method
+                    </span>
+                    <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                  </a>
                 </div>
-              </motion.div>
-            </StaggerItem>
+              </StaggerItem>
+            </Stagger>
+          </div>
+        </div>
+
+        {/* Stat strip */}
+        <div className="mt-24 grid grid-cols-2 gap-y-10 border-t border-neutral-200 pt-12 md:grid-cols-4">
+          {[
+            { n: "20", label: "Directors to cast" },
+            { n: "5", label: "Approval gates" },
+            { n: "4K", label: "Master delivery" },
+            { n: "48h", label: "Concept to cut" },
+          ].map((s, i) => (
+            <Reveal key={s.label} delay={i * 0.08}>
+              <Counter
+                value={s.n}
+                className="block font-serif text-[44px] leading-none tracking-tight text-neutral-900 tabular-nums md:text-[64px]"
+              />
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">
+                {s.label}
+              </p>
+            </Reveal>
           ))}
-        </StaggerReveal>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════
-   HOW IT WORKS
-   ═══════════════════════════════════════════════ */
-
-function HowItWorksSection() {
-  return (
-    <section id="how-it-works" className="px-6 py-28">
-      <div className="mx-auto max-w-4xl">
-        <Reveal>
-          <div className="mb-16 text-center">
-            <p className="label-caps mb-4">Process</p>
-            <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] leading-[1.05]">
-              Brand URL to launch
-              <br />
-              <span className="text-black/25">in four steps</span>
-            </h2>
-            <p className="mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-black/40">
-              A workflow so streamlined it feels like magic. Your AI agent
-              handles every step.
-            </p>
-          </div>
-        </Reveal>
-
-        <div className="relative">
-          <div className="absolute left-[27px] top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-black/[0.08] to-transparent hidden sm:block" />
-
-          <div className="space-y-5">
-            {steps.map((step, i) => (
-              <Reveal key={step.number} delay={i * 0.1}>
-                <motion.div
-                  whileHover={{ x: 4 }}
-                  transition={{ duration: 0.2 }}
-                  className="group relative flex gap-6 rounded-2xl border border-black/[0.06] bg-white p-6 sm:p-8 transition-all hover:border-black/[0.12] hover:shadow-lg"
-                >
-                  <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#4F6247] text-white">
-                    <step.icon className="h-5 w-5" />
-                    <div className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-white border border-[#4F6247]/15 text-[11px] font-bold text-[#4F6247]">
-                      {step.number}
-                    </div>
-                  </div>
-
-                  <div className="pt-1">
-                    <h3 className="text-[17px] font-semibold tracking-tight">
-                      {step.title}
-                    </h3>
-                    <p className="mt-2 text-[15px] leading-relaxed text-black/40">
-                      {step.description}
-                    </p>
-                  </div>
-
-                  <ArrowRight className="hidden sm:block h-5 w-5 shrink-0 text-black/10 group-hover:text-black/30 transition-colors self-center ml-auto" />
-                </motion.div>
-              </Reveal>
-            ))}
-          </div>
         </div>
       </div>
     </section>
   );
 }
 
-/* ═══════════════════════════════════════════════
-   COMPARISON TABLE
-   ═══════════════════════════════════════════════ */
-
-function ComparisonSection() {
+/* =========================================================================
+   CASTING — featured director personas (talking-head avatars in product)
+   ========================================================================= */
+function CastingSection() {
   return (
-    <section className="px-6 py-28 bg-neutral-50/50">
-      <div className="mx-auto max-w-4xl">
-        <Reveal>
-          <div className="mb-16 text-center">
-            <p className="label-caps mb-4">Comparison</p>
-            <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] leading-[1.05]">
-              The old way is
-              <br />
-              <span className="text-black/25">expensive and slow</span>
-            </h2>
-            <p className="mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-black/40">
-              See how TwinLink compares to traditional creative agencies and
-              in-house teams.
-            </p>
+    <section id="cast" className="border-y border-neutral-200 bg-neutral-50 py-28 md:py-36">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <div>
+            <Reveal>
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500">
+                [02] The lobby
+              </p>
+            </Reveal>
+            <Reveal delay={0.05}>
+              <h2 className="mt-4 font-serif text-[44px] leading-[1.02] tracking-tight text-neutral-900 md:text-[88px]">
+                Cast your director.
+              </h2>
+            </Reveal>
           </div>
-        </Reveal>
+          <Reveal delay={0.1}>
+            <p className="max-w-sm font-serif text-[15px] leading-relaxed text-neutral-600">
+              Twenty fictional auteurs. Each one a school of cinema, a voice, a list of
+              films cited. Pick one to lead. Pick a second if you want a co-director —
+              they&apos;ll argue.
+            </p>
+          </Reveal>
+        </div>
+
+        <div className="mt-16 grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-5">
+          {FEATURED_DIRECTORS.map((d, i) => (
+            <motion.figure
+              key={d.id}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: i * 0.04 }}
+              className="group relative aspect-[3/4] overflow-hidden bg-neutral-900"
+            >
+              <Image
+                src={`/directors/${d.id}.png`}
+                alt={d.name}
+                fill
+                sizes="(max-width: 768px) 50vw, 25vw"
+                className="object-cover grayscale transition-transform duration-[1400ms] ease-[cubic-bezier(.22,1,.36,1)] group-hover:scale-105"
+              />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.75) 100%)",
+                }}
+              />
+              <div className="absolute left-4 right-4 top-4 flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-white/80">
+                  Director
+                </span>
+                <span className="font-mono text-[10px] tabular-nums text-white/60">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+              </div>
+              <figcaption className="absolute inset-x-4 bottom-4 text-white">
+                <p className="font-serif text-[20px] leading-tight tracking-tight">
+                  {d.name}
+                </p>
+                <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.22em] text-white/70">
+                  {d.school}
+                </p>
+              </figcaption>
+            </motion.figure>
+          ))}
+        </div>
 
         <Reveal delay={0.1}>
-          <div className="rounded-2xl border border-black/[0.08] bg-white overflow-hidden shadow-sm">
-            <div className="grid grid-cols-3 border-b border-black/[0.06] bg-black/[0.02]">
-              <div className="p-5 text-[13px] font-medium text-black/40">
-                Feature
-              </div>
-              <div className="p-5 text-[13px] font-medium text-black/30 text-center">
-                Traditional Agency
-              </div>
-              <div className="p-5 text-[13px] font-bold text-black text-center">
-                TwinLink AI
-              </div>
+          <div className="mt-14 flex items-center justify-between border-t border-neutral-200 pt-8">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">
+              + 12 more in the lobby
+            </p>
+            <Link
+              href="/login"
+              className="group inline-flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-900"
+            >
+              <span className="border-b border-neutral-900 pb-0.5">
+                Sign in to cast
+              </span>
+              <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* =========================================================================
+   REEL — featured films (real assets)
+   ========================================================================= */
+function ReelSection() {
+  // Span layout — varied mosaic across 6 cols.
+  const spans = [
+    "md:col-span-6",
+    "md:col-span-3",
+    "md:col-span-3",
+    "md:col-span-6",
+  ];
+
+  return (
+    <section id="reel" className="bg-white py-28 md:py-36">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <div>
+            <Reveal>
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500">
+                [03] Selected films
+              </p>
+            </Reveal>
+            <Reveal delay={0.05}>
+              <h2 className="mt-4 font-serif text-[44px] leading-[1.02] tracking-tight text-neutral-900 md:text-[88px]">
+                The reel.
+              </h2>
+            </Reveal>
+          </div>
+          <Reveal delay={0.1}>
+            <p className="max-w-sm font-serif text-[15px] leading-relaxed text-neutral-600">
+              Four films, looping in muted black-and-white below.{" "}
+              <em>Grizzlies</em>, <em>Dream Big</em>, <em>Garage Pizza</em>,{" "}
+              <em>Now on Android</em> — each composed, directed and rendered
+              through the TwinLink pipeline.
+            </p>
+          </Reveal>
+        </div>
+
+        <div className="mt-16 grid grid-cols-1 gap-6 md:grid-cols-6 md:gap-5">
+          {A.films.map((f, i) => (
+            <div key={f.title} className={spans[i] ?? "md:col-span-3"}>
+              <FilmTile
+                index={i}
+                src={f.src}
+                label={f.label}
+                title={f.title}
+                meta={f.meta}
+                aspect={f.aspect}
+              />
             </div>
-
-            {comparisons.map((row, i) => (
-              <motion.div
-                key={row.feature}
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
-                className="grid grid-cols-3 border-b border-black/[0.04] last:border-0 hover:bg-black/[0.01] transition-colors"
-              >
-                <div className="p-5 text-[14px] font-medium text-black/70">
-                  {row.feature}
-                </div>
-                <div className="p-5 text-[14px] text-black/30 text-center">
-                  {row.old}
-                </div>
-                <div className="p-5 text-[14px] font-semibold text-[#4F6247] text-center">
-                  {row.new}
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════
-   USE CASES
-   ═══════════════════════════════════════════════ */
-
-function UseCasesSection() {
-  return (
-    <section className="px-6 py-28">
-      <div className="mx-auto max-w-6xl">
-        <Reveal>
-          <div className="mb-16 text-center">
-            <p className="label-caps mb-4">Use Cases</p>
-            <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] leading-[1.05]">
-              Built for teams
-              <br />
-              <span className="text-black/25">that move fast</span>
-            </h2>
-          </div>
-        </Reveal>
-
-        <StaggerReveal className="grid gap-5 sm:grid-cols-2" stagger={0.08}>
-          {useCases.map((uc) => (
-            <StaggerItem key={uc.title}>
-              <motion.div
-                whileHover={{ y: -4 }}
-                transition={{ duration: 0.2 }}
-                className="group relative rounded-2xl border border-black/[0.06] bg-white p-8 transition-all hover:border-black/[0.12] hover:shadow-lg h-full"
-              >
-                <div className="flex items-start gap-5">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#4F6247]/[0.06] border border-[#4F6247]/[0.1]">
-                    <uc.icon className="h-5 w-5 text-[#4F6247]" />
-                  </div>
-                  <div>
-                    <h3 className="text-[17px] font-semibold tracking-tight">
-                      {uc.title}
-                    </h3>
-                    <p className="mt-2 text-[14px] leading-relaxed text-black/40">
-                      {uc.description}
-                    </p>
-                    <p className="mt-4 text-[13px] font-semibold text-black/60">
-                      {uc.stats}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </StaggerItem>
           ))}
-        </StaggerReveal>
-      </div>
-    </section>
-  );
-}
+        </div>
 
-/* ═══════════════════════════════════════════════
-   TESTIMONIALS
-   ═══════════════════════════════════════════════ */
-
-function TestimonialsSection() {
-  return (
-    <section className="relative overflow-hidden bg-[#0A0A0A] px-6 py-28 text-white">
-      <div className="landing-dot-bg absolute inset-0 opacity-[0.1]" />
-
-      <div className="relative mx-auto max-w-6xl">
-        <Reveal>
-          <div className="mb-16 text-center">
-            <p className="label-caps mb-4 text-white/25">Testimonials</p>
-            <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] leading-[1.05]">
-              Loved by marketers
-              <br />
-              <span className="text-white/25">everywhere</span>
-            </h2>
+        <Reveal delay={0.1}>
+          <div className="mt-14 flex justify-center">
+            <a
+              href="#method"
+              className="group inline-flex items-center gap-3 font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-900"
+            >
+              <span className="h-px w-10 bg-neutral-900 transition-all group-hover:w-16" />
+              See how it&apos;s made
+            </a>
           </div>
         </Reveal>
-
-        <StaggerReveal className="grid gap-5 sm:grid-cols-2" stagger={0.08}>
-          {testimonials.map((t) => (
-            <StaggerItem key={t.name}>
-              <div className="group rounded-2xl border border-white/[0.07] bg-white/[0.02] p-7 h-full transition-colors hover:border-white/[0.12] hover:bg-white/[0.04]">
-                <div className="mb-5 inline-flex rounded-full bg-[#4F6247]/20 border border-[#4F6247]/15 px-3 py-1 text-[12px] font-semibold text-[#8BA686]">
-                  {t.metric}
-                </div>
-
-                <p className="text-[15px] leading-relaxed text-white/50">
-                  &ldquo;{t.quote}&rdquo;
-                </p>
-
-                <div className="mt-6 flex items-center gap-3 pt-5 border-t border-white/[0.06]">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold text-white/50">
-                    {t.name[0]}
-                  </div>
-                  <div>
-                    <p className="text-[14px] font-semibold text-white/80">
-                      {t.name}
-                    </p>
-                    <p className="text-[12px] text-white/30">
-                      {t.role}, {t.company}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </StaggerItem>
-          ))}
-        </StaggerReveal>
       </div>
     </section>
   );
 }
 
-/* ═══════════════════════════════════════════════
-   INTEGRATIONS
-   ═══════════════════════════════════════════════ */
+/* =========================================================================
+   METHOD — 5 stages, numbered, media-rich
+   ========================================================================= */
+function MethodSection() {
+  const stages = [
+    {
+      n: "01",
+      label: "Casting",
+      hint: "Lobby · lead · co-director",
+      image: "/method/01-casting.png",
+      desc:
+        "Pick one director or two. Each is a fictional auteur with a school, a voice and a body of cinema cited. They show up as talking-head avatars and stay with you from pitch to wrap.",
+    },
+    {
+      n: "02",
+      label: "Treatment",
+      hint: "Concept · world · color · camera",
+      image: "/method/02-treatment.png",
+      desc:
+        "You describe the image you can't stop seeing. Your director returns a treatment — one location, one color script, one camera language. Approve it, or push back.",
+    },
+    {
+      n: "03",
+      label: "Plates",
+      hint: "Characters · locations · wardrobe · props",
+      image: "/method/03-plates.png",
+      desc:
+        "Identity-locked references, generated once and reused everywhere. Multi-angle character sheets, location masters, wardrobe, props — composited into stills before any motion is wished for.",
+    },
+    {
+      n: "04",
+      label: "Keyframes",
+      hint: "One composed still per shot",
+      image: "/method/04-keyframes.png",
+      desc:
+        "Every shot becomes a composed still — framing, pose, lens, lighting, depth. Cannes-tier is decided here, not in the prompt. Edit, re-light, swap wardrobe — without losing what you already approved.",
+    },
+    {
+      n: "05",
+      label: "The Cut",
+      hint: "Direct · score · grade · master",
+      image: "/method/05-the-cut.png",
+      desc:
+        "Each frame becomes a directed shot. Cut, scored, grain pass, LUT, letterbox. Mastered at 4K, exported in any aspect — vertical for stories, anamorphic for the festival, square for the feed.",
+    },
+  ];
 
-function IntegrationsSection() {
   return (
-    <section className="px-6 py-28">
-      <div className="mx-auto max-w-4xl text-center">
+    <section id="method" className="bg-white py-28 md:py-40">
+      <div className="mx-auto max-w-7xl px-6">
         <Reveal>
-          <p className="label-caps mb-4">Integrations</p>
-          <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] leading-[1.05]">
-            Publish everywhere
-            <br />
-            <span className="text-black/25">from one platform</span>
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-black/40">
-            Generate creatives optimized for every major ad platform. Export in
-            the right formats, sizes, and specs — automatically.
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500">
+            [04] The method
           </p>
         </Reveal>
-
-        <Reveal delay={0.15}>
-          <div className="mt-14 flex flex-wrap items-center justify-center gap-4">
-            {integrations.map((name) => (
-              <motion.div
-                key={name}
-                whileHover={{ y: -3, borderColor: "rgba(0,0,0,0.15)" }}
-                transition={{ duration: 0.2 }}
-                className="flex items-center gap-3 rounded-xl border border-black/[0.07] bg-white px-6 py-4 shadow-sm transition-shadow hover:shadow-md"
-              >
-                <div className="h-6 w-6 rounded-md bg-black/[0.06]" />
-                <span className="text-[14px] font-medium text-black/60">
-                  {name}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════
-   PRICING
-   ═══════════════════════════════════════════════ */
-
-const plans = [
-  {
-    name: "Free",
-    price: "$0",
-    period: "/month",
-    description: "500 credits to get started",
-    features: [
-      "500 free credits",
-      "Static ad generation",
-      "1 brand",
-      "Community support",
-    ],
-    cta: "Get started",
-    popular: false,
-    dark: false,
-  },
-  {
-    name: "Pro",
-    price: "$29",
-    period: "/month",
-    description: "5,000 credits/month",
-    features: [
-      "5,000 credits/month",
-      "Static + Video ads",
-      "UGC avatars",
-      "5 brands",
-      "Competitor research",
-      "Priority support",
-    ],
-    cta: "Start free trial",
-    popular: true,
-    dark: true,
-  },
-  {
-    name: "Enterprise",
-    price: "$79",
-    period: "/month",
-    description: "Unlimited credits",
-    features: [
-      "Unlimited credits",
-      "All generation types",
-      "Custom avatars",
-      "Unlimited brands",
-      "API access",
-      "White-label option",
-      "Dedicated support",
-    ],
-    cta: "Contact sales",
-    popular: false,
-    dark: false,
-  },
-];
-
-function PricingSection() {
-  return (
-    <section id="pricing" className="px-6 py-28 bg-neutral-50/50">
-      <div className="mx-auto max-w-5xl">
-        <Reveal>
-          <div className="mb-16 text-center">
-            <p className="label-caps mb-4">Pricing</p>
-            <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] leading-[1.05]">
-              Start free,
-              <br />
-              <span className="text-black/25">scale as you grow</span>
-            </h2>
-            <p className="mx-auto mt-5 max-w-xl text-[17px] leading-relaxed text-black/40">
-              No hidden fees, no surprises. Every plan includes full access to
-              the AI agent.
-            </p>
-          </div>
+        <Reveal delay={0.05}>
+          <h2 className="mt-4 font-serif text-[44px] leading-[1.02] tracking-tight text-neutral-900 md:text-[88px]">
+            Five stages.
+            <br />
+            <span className="italic text-neutral-400">Five approvals.</span>
+          </h2>
         </Reveal>
 
-        <StaggerReveal className="grid gap-6 md:grid-cols-3" stagger={0.1}>
-          {plans.map((plan) => (
-            <StaggerItem key={plan.name}>
-              <motion.div
-                whileHover={{ y: -6 }}
-                transition={{ duration: 0.25 }}
-                className={`relative flex flex-col rounded-2xl p-8 h-full transition-shadow hover:shadow-xl ${
-                  plan.dark
-                    ? "bg-[#4F6247] text-white border-2 border-[#4F6247] shadow-xl"
-                    : "bg-white border border-black/[0.08]"
-                }`}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-white px-4 py-1 text-[11px] font-bold tracking-wide text-[#4F6247] shadow-sm border border-[#4F6247]/15">
-                    Most Popular
-                  </div>
-                )}
-
-                <div>
-                  <h3
-                    className={`text-[15px] font-semibold tracking-tight ${
-                      plan.dark ? "text-white/70" : ""
-                    }`}
-                  >
-                    {plan.name}
-                  </h3>
-                  <div className="mt-5">
-                    <span className="text-[3rem] font-bold tracking-tight leading-none">
-                      {plan.price}
-                    </span>
-                    <span
-                      className={`ml-1 text-sm ${
-                        plan.dark ? "text-white/35" : "text-black/35"
-                      }`}
-                    >
-                      {plan.period}
-                    </span>
-                  </div>
-                  <p
-                    className={`mt-2 text-[13px] ${
-                      plan.dark ? "text-white/40" : "text-black/40"
-                    }`}
-                  >
-                    {plan.description}
-                  </p>
-                  <ul className="mt-7 space-y-3">
-                    {plan.features.map((item) => (
-                      <li
-                        key={item}
-                        className={`flex items-center gap-2.5 text-[13px] ${
-                          plan.dark ? "text-white/60" : "text-black/55"
-                        }`}
-                      >
-                        <CheckIcon
-                          className={`h-3.5 w-3.5 shrink-0 ${
-                            plan.dark ? "text-white/40" : "text-black/25"
-                          }`}
-                        />
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="mt-auto pt-8">
-                  <Link href="/signup" className="block">
-                    <motion.button
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={`w-full rounded-full py-3 text-[14px] font-medium transition-colors ${
-                        plan.dark
-                          ? "bg-white text-[#4F6247] hover:bg-white/90"
-                          : "border border-black/10 hover:bg-[#4F6247] hover:text-white hover:border-[#4F6247]"
-                      }`}
-                    >
-                      {plan.cta}
-                    </motion.button>
-                  </Link>
-                </div>
-              </motion.div>
-            </StaggerItem>
+        <div className="mt-20 space-y-16 md:space-y-24">
+          {stages.map((s, i) => (
+            <StageRow key={s.n} stage={s} flip={i % 2 === 1} />
           ))}
-        </StaggerReveal>
+        </div>
       </div>
     </section>
   );
 }
 
-/* ═══════════════════════════════════════════════
-   FAQ
-   ═══════════════════════════════════════════════ */
-
-function FAQItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
-
+function StageRow({
+  stage,
+  flip,
+}: {
+  stage: { n: string; label: string; hint: string; desc: string; image?: string };
+  flip: boolean;
+}) {
   return (
     <motion.div
-      className="border-b border-black/[0.06] last:border-0"
-      initial={false}
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+      className="grid grid-cols-1 items-center gap-10 md:grid-cols-12"
     >
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between py-5 text-left group"
-      >
-        <span className="text-[15px] font-medium text-black/80 group-hover:text-black transition-colors pr-8">
-          {q}
-        </span>
-        <motion.div
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-        >
-          <ChevronDownIcon className="h-4 w-4 shrink-0 text-black/25" />
-        </motion.div>
-      </button>
-      <motion.div
-        initial={false}
-        animate={{
-          height: open ? "auto" : 0,
-          opacity: open ? 1 : 0,
-        }}
-        transition={{ duration: 0.3, ease: [0.25, 0.4, 0.25, 1] }}
-        className="overflow-hidden"
-      >
-        <p className="pb-5 text-[14px] leading-relaxed text-black/40 pr-8">
-          {a}
+      {/* Image card with stage-number overlay */}
+      <div className={`md:col-span-5 ${flip ? "md:order-2" : ""}`}>
+        <div className="relative aspect-[4/5] w-full overflow-hidden bg-neutral-900 text-white">
+          {/* Gradient fallback (visible until the image loads or if missing) */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(120% 80% at 30% 20%, rgba(255,255,255,0.08), transparent 55%), linear-gradient(180deg, #141414 0%, #000 100%)",
+            }}
+          />
+          {stage.image && (
+            // Plain <img> on purpose — next/image throws on a missing file
+            // during dev, but during the bake we WANT a silent 404 → gradient
+            // fallback so the page stays usable while assets are still generating.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={stage.image}
+              alt={`${stage.label} — TwinLink stage`}
+              className="absolute inset-0 h-full w-full object-cover grayscale"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          )}
+          {/* Darken so overlay text holds */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{ background: "rgba(0,0,0,0.45)" }}
+          />
+          {/* Vignette */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(120% 90% at 50% 40%, transparent 50%, rgba(0,0,0,0.55) 100%)",
+            }}
+          />
+
+          <div className="relative flex h-full flex-col justify-between p-6 md:p-8">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/70">
+                Stage
+              </span>
+              <span className="font-mono text-[10px] tabular-nums text-white/70">
+                {stage.n}/05
+              </span>
+            </div>
+
+            <div className="relative -mx-2 flex items-center justify-center overflow-hidden">
+              <motion.span
+                initial={{ y: 60, opacity: 0 }}
+                whileInView={{ y: 0, opacity: 1 }}
+                viewport={{ once: true, margin: "-80px" }}
+                transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+                className="font-serif text-[28vw] leading-[0.85] tracking-tighter text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.6)] md:text-[220px]"
+              >
+                {stage.n}
+              </motion.span>
+            </div>
+
+            <div className="flex items-end justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-white/80">
+                {stage.label}
+              </span>
+              <div className="h-px w-16 bg-white/40" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Copy */}
+      <div className={`md:col-span-7 ${flip ? "md:order-1 md:pr-10" : "md:pl-10"}`}>
+        <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-neutral-400">
+          {stage.hint}
         </p>
-      </motion.div>
+        <h3 className="mt-4 font-serif text-[36px] leading-[1.05] tracking-tight text-neutral-900 md:text-[56px]">
+          {stage.label}
+        </h3>
+        <p className="mt-6 max-w-xl font-serif text-[17px] leading-[1.7] text-neutral-700">
+          {stage.desc}
+        </p>
+      </div>
     </motion.div>
   );
 }
 
-function FAQSection() {
+/* =========================================================================
+   SPLIT FEATURE — video left / copy right, cinematic
+   ========================================================================= */
+function SplitFeatureSection() {
   return (
-    <section className="px-6 py-28">
-      <div className="mx-auto max-w-3xl">
-        <Reveal>
-          <div className="mb-14 text-center">
-            <p className="label-caps mb-4">FAQ</p>
-            <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[3.5rem] leading-[1.05]">
-              Questions?
-              <br />
-              <span className="text-black/25">We have answers.</span>
-            </h2>
-          </div>
-        </Reveal>
-
-        <Reveal delay={0.1}>
-          <div className="rounded-2xl border border-black/[0.08] bg-white px-7">
-            {faqItems.map((item) => (
-              <FAQItem key={item.q} q={item.q} a={item.a} />
-            ))}
-          </div>
-        </Reveal>
-
-        <Reveal delay={0.2}>
-          <p className="mt-8 text-center text-[14px] text-black/35">
-            Still have questions?{" "}
-            <Link
-              href="mailto:support@twinlink.ai"
-              className="text-black/60 underline underline-offset-2 hover:text-black transition-colors"
-            >
-              Reach out to our team
-            </Link>
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════
-   FINAL CTA
-   ═══════════════════════════════════════════════ */
-
-function FinalCTA() {
-  return (
-    <section className="relative overflow-hidden bg-[#0A0A0A] px-6 py-32 text-white">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[600px] w-[800px] rounded-full opacity-30"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, rgba(255,255,255,0.06) 0%, transparent 65%)",
-        }}
-      />
-
-      <div className="relative mx-auto max-w-3xl text-center">
-        <Reveal>
-          <p className="label-caps mb-5 text-white/20">Get started</p>
-        </Reveal>
-        <Reveal delay={0.1}>
-          <h2 className="text-[2.5rem] font-bold tracking-[-0.03em] sm:text-[4rem] leading-[1.05]">
-            Ready to 10x your
-            <br />
-            <span className="text-white/30">creative output?</span>
-          </h2>
-        </Reveal>
-        <Reveal delay={0.2}>
-          <p className="mx-auto mt-6 max-w-lg text-[17px] leading-relaxed text-white/35">
-            Join thousands of marketers using AI to create better ads, faster.
-            Your first 500 credits are on us.
-          </p>
-        </Reveal>
-        <Reveal delay={0.3}>
-          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link href="/signup">
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                className="inline-flex items-center gap-2.5 rounded-full bg-[#4F6247] px-8 py-4 text-[15px] font-medium text-white shadow-lg transition-all hover:bg-[#3d4a3b] hover:shadow-xl"
-              >
-                Start creating for free
-                <ArrowRight className="h-4 w-4" />
-              </motion.button>
-            </Link>
-            <Link href="#pricing">
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                className="inline-flex items-center gap-2 rounded-full border border-white/10 px-8 py-4 text-[15px] font-medium text-white/50 transition-colors hover:border-white/20 hover:text-white/70"
-              >
-                View pricing
-              </motion.button>
-            </Link>
-          </div>
-        </Reveal>
-        <Reveal delay={0.4}>
-          <p className="mt-6 text-[13px] text-white/15 tracking-wide">
-            No credit card required &middot; Cancel anytime &middot; Setup in 30
-            seconds
-          </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════
-   FOOTER
-   ═══════════════════════════════════════════════ */
-
-function Footer() {
-  return (
-    <footer className="border-t border-black/[0.05] px-6 py-16">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-12 md:grid-cols-6">
-          <div className="md:col-span-2">
-            <div className="flex items-center gap-2.5">
-              <img src="/logo.svg" alt="TwinLink" className="h-8 w-8" />
-              <span className="text-[18px] font-bold tracking-tight">
-                TwinLink
+    <section className="relative bg-neutral-950 py-28 text-white md:py-40">
+      <div className="mx-auto grid max-w-7xl grid-cols-1 gap-12 px-6 md:grid-cols-12 md:gap-16">
+        <div className="md:col-span-7">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+            className="relative aspect-[4/3] w-full overflow-hidden bg-black"
+          >
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(120% 80% at 30% 20%, rgba(255,255,255,0.08), transparent 55%), linear-gradient(180deg, #141414 0%, #000 100%)",
+              }}
+            />
+            <video
+              src={A.split}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 h-full w-full object-cover grayscale"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(120% 90% at 50% 40%, transparent 45%, rgba(0,0,0,0.6) 100%)",
+              }}
+            />
+            <div className="absolute left-5 top-5 flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse-dot" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.24em] text-white/70">
+                Live on set
               </span>
             </div>
-            <p className="mt-3 max-w-xs text-[14px] leading-relaxed text-black/35">
-              AI-powered ad generation platform. From brand URL to
-              launch-ready creatives in minutes.
+            <div className="absolute right-5 top-5 font-mono text-[10px] tabular-nums text-white/60">
+              REC · 00:00:42:16
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="md:col-span-5 md:self-center">
+          <Reveal>
+            <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-white/50">
+              [05] The director on call
             </p>
-            <div className="mt-6 flex gap-3">
-              {[XIcon, MailIcon].map((Icon, i) => (
-                <div
-                  key={i}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-black/[0.06] text-black/30 hover:text-black/60 hover:border-black/15 transition-colors cursor-pointer"
-                >
-                  <Icon className="h-4 w-4" />
+          </Reveal>
+          <Reveal delay={0.05}>
+            <h2 className="mt-5 font-serif text-[40px] leading-[1.05] tracking-tight md:text-[64px]">
+              A studio in a browser tab.
+            </h2>
+          </Reveal>
+          <Reveal delay={0.1}>
+            <p className="mt-6 max-w-md font-serif text-[16px] leading-[1.7] text-white/70">
+              Your director is a talking-head avatar, live on screen — pitching, blocking,
+              calling lens choices, teaching the school as you go. Casting, treatment,
+              shotlist, cut — one workspace, no plugins, no exports.
+            </p>
+          </Reveal>
+          <Stagger className="mt-10 space-y-4">
+            {[
+              "Realtime AI director with voice and face",
+              "Identity-locked plates that never drift",
+              "Composed keyframes before any motion",
+              "Lineage graph — every edit traceable",
+              "4K master, multi-aspect export",
+            ].map((f) => (
+              <StaggerItem key={f}>
+                <div className="flex items-center gap-4 border-b border-white/10 pb-4">
+                  <span className="font-mono text-[10px] tabular-nums text-white/40">
+                    ✦
+                  </span>
+                  <p className="font-serif text-[16px] text-white/90">{f}</p>
                 </div>
-              ))}
+              </StaggerItem>
+            ))}
+          </Stagger>
+          <Reveal delay={0.15}>
+            <Magnetic strength={0.25}>
+              <Link
+                href="/login"
+                data-cursor="hover"
+                className="mt-12 inline-flex h-12 cursor-pointer items-center gap-3 bg-white px-6 font-mono text-[11px] uppercase tracking-[0.22em] text-neutral-900 transition-colors hover:bg-neutral-200"
+              >
+                Sign in <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Magnetic>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* =========================================================================
+   DISCIPLINES MARQUEE
+   ========================================================================= */
+function DisciplinesMarquee() {
+  const tags = [
+    "Fashion",
+    "Fragrance",
+    "Automotive",
+    "Hospitality",
+    "Spirits",
+    "Beauty",
+    "Jewelry",
+    "Tech",
+    "Food",
+    "Travel",
+    "Music",
+    "Editorial",
+  ];
+  return (
+    <section className="border-y border-neutral-200 bg-white py-20">
+      <div className="mx-auto mb-10 max-w-7xl px-6">
+        <Reveal>
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500">
+            [06] Built for every category
+          </p>
+        </Reveal>
+      </div>
+      <Marquee speed={60}>
+        {tags.map((t, i) => (
+          <span key={`${t}-${i}`} className="flex items-center">
+            <span className="px-8 font-serif text-[56px] italic tracking-tight text-neutral-900 md:text-[96px]">
+              {t}
+            </span>
+            <span className="font-serif text-[40px] text-neutral-300 md:text-[56px]">
+              /
+            </span>
+          </span>
+        ))}
+      </Marquee>
+      <Marquee speed={80} reverse>
+        {tags.slice().reverse().map((t, i) => (
+          <span key={`${t}-r-${i}`} className="flex items-center">
+            <span className="px-8 font-mono text-[14px] uppercase tracking-[0.28em] text-neutral-500 md:text-[16px]">
+              {t}
+            </span>
+            <span className="text-neutral-300">●</span>
+          </span>
+        ))}
+      </Marquee>
+    </section>
+  );
+}
+
+/* =========================================================================
+   QUOTE — director-persona pullquote (from /lib/directors/personas/yuki-sato.json)
+   ========================================================================= */
+function QuoteSection() {
+  return (
+    <section className="bg-white py-32 md:py-44">
+      <div className="mx-auto max-w-5xl px-6">
+        <Reveal>
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500">
+            [07] From the lobby
+          </p>
+        </Reveal>
+        <Reveal delay={0.1}>
+          <blockquote className="mt-10 font-serif text-[36px] leading-[1.1] tracking-tight text-neutral-900 md:text-[64px]">
+            <span className="text-neutral-300">&ldquo;</span>
+            Composition is character. Where the camera sits decides what the
+            audience feels. Hold longer than feels comfortable. Then hold
+            longer than that.
+            <span className="text-neutral-300">&rdquo;</span>
+          </blockquote>
+        </Reveal>
+        <Reveal delay={0.2}>
+          <div className="mt-14 flex items-center gap-4 border-t border-neutral-200 pt-6">
+            <div className="relative h-12 w-12 overflow-hidden rounded-full bg-neutral-900">
+              <Image
+                src="/directors/yuki-sato.png"
+                alt="Yuki Sato"
+                fill
+                sizes="48px"
+                className="object-cover grayscale"
+              />
+            </div>
+            <div>
+              <p className="font-serif text-[16px] text-neutral-900">Yuki Sato</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-500">
+                Director · Hong Kong romantic atmospherics
+              </p>
             </div>
           </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
 
-          {Object.entries(footerLinks).map(([title, links]) => (
-            <div key={title}>
-              <h4 className="text-[12px] font-semibold tracking-wide uppercase text-black/30 mb-4">
-                {title}
-              </h4>
-              <ul className="space-y-2.5">
-                {links.map((link) => (
-                  <li key={link}>
-                    <span className="text-[14px] text-black/40 hover:text-black transition-colors cursor-pointer">
-                      {link}
-                    </span>
+/* =========================================================================
+   PRICING
+   ========================================================================= */
+function PricingSection() {
+  const plans = [
+    {
+      name: "Opening",
+      price: "$29",
+      hint: "For the first film",
+      bullets: [
+        "200 credits / month",
+        "Up to 1 film, 60 seconds",
+        "All aspects, 1080p master",
+        "Email support",
+      ],
+      cta: "Request access",
+      featured: false,
+    },
+    {
+      name: "Director",
+      price: "$119",
+      hint: "For working creatives",
+      bullets: [
+        "1,000 credits / month",
+        "Unlimited films up to 90s",
+        "4K master · priority render",
+        "Early access to new craft",
+      ],
+      cta: "Request access",
+      featured: true,
+    },
+    {
+      name: "Studio",
+      price: "Custom",
+      hint: "For brands & agencies",
+      bullets: [
+        "Unlimited render · team seats",
+        "Brand-locked plate library",
+        "Dedicated creative engineer",
+        "SLA, SSO, invoice billing",
+      ],
+      cta: "Talk to us",
+      featured: false,
+    },
+  ];
+
+  return (
+    <section id="pricing" className="border-t border-neutral-200 bg-white py-28 md:py-40">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <div>
+            <Reveal>
+              <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-neutral-500">
+                [08] Pricing
+              </p>
+            </Reveal>
+            <Reveal delay={0.05}>
+              <h2 className="mt-4 font-serif text-[44px] leading-[1.02] tracking-tight text-neutral-900 md:text-[88px]">
+                Pay per film.
+              </h2>
+            </Reveal>
+          </div>
+          <Reveal delay={0.1}>
+            <p className="max-w-sm font-serif text-[15px] leading-relaxed text-neutral-600">
+              Credits burn only when you generate. A 60-second film runs roughly 100
+              credits end-to-end.
+            </p>
+          </Reveal>
+        </div>
+
+        <div className="mt-16 grid grid-cols-1 gap-px overflow-hidden border border-neutral-900 bg-neutral-900 md:grid-cols-3">
+          {plans.map((p, i) => (
+            <motion.div
+              key={p.name}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: i * 0.08 }}
+              className={`flex flex-col p-10 ${
+                p.featured
+                  ? "bg-neutral-900 text-white"
+                  : "bg-white text-neutral-900"
+              }`}
+            >
+              <div className="flex items-baseline justify-between">
+                <p
+                  className={`font-mono text-[10px] uppercase tracking-[0.22em] ${
+                    p.featured ? "text-white/60" : "text-neutral-500"
+                  }`}
+                >
+                  {p.name}
+                </p>
+                {p.featured && (
+                  <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-white/60">
+                    ★ Popular
+                  </span>
+                )}
+              </div>
+              <p className="mt-6 font-serif text-[72px] leading-none tracking-tight tabular-nums">
+                {p.price}
+              </p>
+              <p
+                className={`mt-3 font-mono text-[10px] uppercase tracking-[0.22em] ${
+                  p.featured ? "text-white/60" : "text-neutral-500"
+                }`}
+              >
+                {p.hint}
+              </p>
+
+              <ul className="mt-10 flex-1 space-y-3">
+                {p.bullets.map((b) => (
+                  <li
+                    key={b}
+                    className={`flex gap-3 border-t pt-3 font-serif text-[14px] leading-relaxed ${
+                      p.featured
+                        ? "border-white/10 text-white/80"
+                        : "border-neutral-200 text-neutral-700"
+                    }`}
+                  >
+                    <span
+                      className={`mt-[6px] h-1 w-3 flex-shrink-0 ${
+                        p.featured ? "bg-white/50" : "bg-neutral-900"
+                      }`}
+                    />
+                    {b}
                   </li>
                 ))}
               </ul>
-            </div>
+
+              <Link
+                href="/login"
+                className={`mt-10 inline-flex h-12 cursor-pointer items-center justify-center gap-3 font-mono text-[11px] uppercase tracking-[0.22em] transition-colors ${
+                  p.featured
+                    ? "bg-white text-neutral-900 hover:bg-neutral-200"
+                    : "bg-neutral-900 text-white hover:bg-neutral-800"
+                }`}
+              >
+                {p.cta} <ArrowRight className="h-4 w-4" />
+              </Link>
+            </motion.div>
           ))}
         </div>
+      </div>
+    </section>
+  );
+}
 
-        <div className="mt-16 flex flex-col items-center justify-between gap-4 border-t border-black/[0.05] pt-8 sm:flex-row">
-          <p className="text-[13px] text-black/25">
-            &copy; {new Date().getFullYear()} TwinLink. All rights reserved.
+/* =========================================================================
+   CLOSING — full-bleed video with massive CTA
+   ========================================================================= */
+function ClosingSection() {
+  const ref = useRef<HTMLElement>(null);
+  const reduce = useReducedMotion();
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ["start end", "end start"],
+  });
+  const y = useTransform(scrollYProgress, [0, 1], ["-10%", "10%"]);
+  const scale = useTransform(scrollYProgress, [0, 1], [1.1, 1]);
+
+  return (
+    <section
+      ref={ref}
+      className="relative h-[90svh] min-h-[640px] w-full overflow-hidden bg-black text-white"
+    >
+      <motion.div
+        style={reduce ? undefined : { y, scale }}
+        className="absolute inset-0"
+      >
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 80% at 30% 20%, rgba(255,255,255,0.08), transparent 55%), linear-gradient(180deg, #141414 0%, #000 100%)",
+          }}
+        />
+        <video
+          src={A.closing}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 h-full w-full object-cover grayscale"
+        />
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{ background: "rgba(0,0,0,0.55)" }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 90% at 50% 50%, transparent 40%, rgba(0,0,0,0.8) 100%)",
+          }}
+        />
+      </motion.div>
+
+      <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-between px-6 py-16">
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-white/70">
+            [09] Start now
           </p>
-          <div className="flex gap-6">
-            {["Privacy Policy", "Terms of Service", "Cookies"].map((item) => (
-              <span
-                key={item}
-                className="text-[13px] text-black/25 hover:text-black/50 transition-colors cursor-pointer"
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-white/50">
+            TwinLink · 2026
+          </p>
+        </div>
+
+        <div className="max-w-5xl">
+          <h2 className="font-serif text-[13vw] leading-[0.9] tracking-tight md:text-[140px]">
+            <SplitHeading text="Your first" />
+            <br />
+            <span className="italic text-white/70">
+              <SplitHeading text="film awaits." delay={0.1} />
+            </span>
+          </h2>
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ delay: 0.3, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-10 max-w-lg font-serif text-[17px] leading-relaxed text-white/80"
+          >
+            TwinLink is invite-only while we onboard our first directors. Request access
+            and we&apos;ll reach out within 72 hours. The benchmark is Cannes Lions — not
+            engagement rate.
+          </motion.p>
+        </div>
+
+        <div className="flex flex-col items-start justify-between gap-8 md:flex-row md:items-end">
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ delay: 0.5, duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="flex flex-wrap items-center gap-3"
+          >
+            <Magnetic strength={0.3}>
+              <Link
+                href="/login"
+                data-cursor="hover"
+                className="group inline-flex h-14 cursor-pointer items-center gap-3 bg-white px-8 font-mono text-[11px] uppercase tracking-[0.22em] text-neutral-900 transition-colors hover:bg-neutral-200"
               >
-                {item}
-              </span>
-            ))}
+                Sign in
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </Link>
+            </Magnetic>
+            <Magnetic strength={0.3}>
+              <a
+                href="#reel"
+                data-cursor="hover"
+                className="inline-flex h-14 items-center gap-3 border border-white/30 px-8 font-mono text-[11px] uppercase tracking-[0.22em] text-white/90 transition-colors hover:border-white hover:text-white"
+              >
+                Watch the reel
+              </a>
+            </Magnetic>
+          </motion.div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-white/50">
+            Invite-only · manual review · 72h reply
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* =========================================================================
+   FOOTER
+   ========================================================================= */
+function Footer() {
+  return (
+    <footer className="bg-white">
+      <div className="mx-auto max-w-7xl px-6 pt-20 pb-12">
+        <div className="grid grid-cols-2 gap-10 md:grid-cols-12">
+          <div className="md:col-span-5">
+            <Link href="/" className="flex items-baseline gap-2">
+              <span className="font-serif text-[26px] tracking-tight text-neutral-900">
+                TwinLink
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-400">
+                director · 2026
+              </span>
+            </Link>
+            <p className="mt-6 max-w-sm font-serif text-[15px] leading-[1.7] text-neutral-600">
+              A creative studio on demand. Cinema-grade commercials and mini-films,
+              cast and directed frame by frame.
+            </p>
+          </div>
+
+          <div className="md:col-span-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-400">
+              Studio
+            </p>
+            <ul className="mt-4 space-y-2 font-serif text-[15px] text-neutral-700">
+              <li><a href="#cast" className="hover:text-neutral-900">Cast</a></li>
+              <li><a href="#reel" className="hover:text-neutral-900">Reel</a></li>
+              <li><a href="#method" className="hover:text-neutral-900">Method</a></li>
+              <li><a href="#pricing" className="hover:text-neutral-900">Pricing</a></li>
+            </ul>
+          </div>
+          <div className="md:col-span-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-400">
+              Company
+            </p>
+            <ul className="mt-4 space-y-2 font-serif text-[15px] text-neutral-700">
+              <li><a href="#manifesto" className="hover:text-neutral-900">Manifesto</a></li>
+              <li>
+                <Link href="/login" className="hover:text-neutral-900">
+                  Contact
+                </Link>
+              </li>
+            </ul>
+          </div>
+          <div className="md:col-span-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-400">
+              Get started
+            </p>
+            <ul className="mt-4 space-y-2 font-serif text-[15px] text-neutral-700">
+              <li>
+                <Link href="/login" className="hover:text-neutral-900">
+                  Sign in
+                </Link>
+              </li>
+              <li>
+                <a href="#reel" className="hover:text-neutral-900">
+                  Watch the reel
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-20 flex flex-col items-start justify-between gap-4 border-t border-neutral-200 pt-8 md:flex-row md:items-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-400">
+            © 2026 TwinLink Studio · All films reserved
+          </p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-400">
+            Invite-only · 72h reply
+          </p>
+        </div>
+      </div>
+
+      {/* Super-sized watermark */}
+      <div className="overflow-hidden border-t border-neutral-200">
+        <p className="select-none whitespace-nowrap text-center font-serif leading-none tracking-tighter text-neutral-900 text-[28vw] md:text-[24vw]">
+          TwinLink
+        </p>
       </div>
     </footer>
   );

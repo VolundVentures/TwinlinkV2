@@ -1,22 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  Upload,
-  Image as ImageIcon,
-  Film,
-  Music,
-  Search,
-  Trash2,
-  Download,
-  Plus,
-  Loader2,
-  X,
-  Grid3X3,
-  LayoutList,
-  Play,
-} from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { cn } from "@/lib/utils";
 
 type Asset = {
@@ -35,12 +19,6 @@ type Asset = {
 
 type FilterType = "all" | "image" | "video" | "audio";
 
-const TYPE_ICONS: Record<string, typeof ImageIcon> = {
-  image: ImageIcon,
-  video: Film,
-  audio: Music,
-};
-
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
@@ -56,20 +34,26 @@ function relativeTime(dateStr: string): string {
   return `${Math.floor(diffHr / 24)}d ago`;
 }
 
+const FILTERS: { key: FilterType; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "image", label: "Images" },
+  { key: "video", label: "Videos" },
+  { key: "audio", label: "Audio" },
+];
+
 export default function AssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
-  const [view, setView] = useState<"grid" | "list">("grid");
   const [dragOver, setDragOver] = useState(false);
   const [previewAsset, setPreviewAsset] = useState<Asset | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch("/api/assets")
-      .then((r) => r.ok ? r.json() : { assets: [] })
+      .then((r) => (r.ok ? r.json() : { assets: [] }))
       .then((d) => setAssets(d.assets || []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -77,14 +61,11 @@ export default function AssetsPage() {
 
   async function handleUpload(files: FileList | File[]) {
     setUploading(true);
-    const fileArr = Array.from(files);
-
-    for (const file of fileArr) {
+    for (const file of Array.from(files)) {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("name", file.name);
       formData.append("source", "upload");
-
       try {
         const res = await fetch("/api/assets", { method: "POST", body: formData });
         if (res.ok) {
@@ -111,251 +92,290 @@ export default function AssetsPage() {
     } catch {}
   }
 
-  const filtered = assets.filter((a) => {
-    if (filter !== "all" && a.type !== filter) return false;
-    if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  useEffect(() => {
+    if (!previewAsset) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPreviewAsset(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [previewAsset]);
 
-  const counts = {
-    all: assets.length,
-    image: assets.filter((a) => a.type === "image").length,
-    video: assets.filter((a) => a.type === "video").length,
-    audio: assets.filter((a) => a.type === "audio").length,
-  };
+  const counts = useMemo(
+    () => ({
+      all: assets.length,
+      image: assets.filter((a) => a.type === "image").length,
+      video: assets.filter((a) => a.type === "video").length,
+      audio: assets.filter((a) => a.type === "audio").length,
+    }),
+    [assets]
+  );
+
+  const filtered = useMemo(
+    () =>
+      assets.filter((a) => {
+        if (filter !== "all" && a.type !== filter) return false;
+        if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      }),
+    [assets, filter, search]
+  );
 
   return (
     <div
-      className="px-4 sm:px-6 md:px-8 py-6 space-y-6 min-h-full"
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      className="mx-auto w-full max-w-6xl px-10 py-14 space-y-10"
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDrop}
     >
       {/* Drag overlay */}
-      <AnimatePresence>
-        {dragOver && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-[#4D5D4B]/10 backdrop-blur-sm flex items-center justify-center"
-          >
-            <div className="bg-white rounded-2xl border-2 border-dashed border-[#4D5D4B] p-12 text-center shadow-xl">
-              <Upload className="h-12 w-12 text-[#4D5D4B] mx-auto mb-4" />
-              <p className="text-[18px] font-bold text-[#1A1A1A]">Drop files to upload</p>
-              <p className="text-[14px] text-[#9CA3AF] mt-1">Images, videos, or audio files</p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {dragOver && (
+        <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-neutral-900/85">
+          <div className="border border-white/30 bg-black px-10 py-8 text-center">
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/60">
+              Drop to upload
+            </p>
+            <p className="mt-3 font-serif text-2xl text-white">
+              Images, videos, or audio.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[28px] font-bold tracking-tight text-[#1A1A1A]">Assets</h1>
-          <p className="text-[14px] text-[#9CA3AF] mt-1">{assets.length} asset{assets.length !== 1 ? "s" : ""}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,video/*,audio/*"
-            className="hidden"
-            onChange={(e) => e.target.files && handleUpload(e.target.files)}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="flex items-center gap-2 rounded-full bg-[#1A1A1A] text-white px-5 py-2.5 text-[14px] font-semibold hover:bg-[#333] transition-colors disabled:opacity-50"
-          >
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Upload
-          </button>
-        </div>
-      </div>
-
-      {/* Filters + Search */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          {(["all", "image", "video", "audio"] as FilterType[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "px-4 py-2 rounded-full text-[13px] font-semibold transition-all flex items-center gap-1.5",
-                filter === f ? "bg-[#1A1A1A] text-white" : "text-[#6B7280] hover:bg-[#F3F4F6]"
-              )}
-            >
-              {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
-              <span className={cn("text-[11px]", filter === f ? "text-white/50" : "text-[#D1D5DB]")}>{counts[f]}</span>
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-xl border border-[#E5E7EB] px-3 h-9">
-            <Search className="h-3.5 w-3.5 text-[#9CA3AF]" />
+      <section>
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+          TwinLink &middot; Assets
+        </p>
+        <div className="mt-4 flex items-end justify-between gap-6">
+          <h1 className="font-serif text-5xl leading-[1.05] tracking-tight text-neutral-900">
+            Every asset.
+            <br />
+            Every reference.
+          </h1>
+          <div className="flex items-center gap-3">
             <input
-              value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="bg-transparent text-[13px] text-[#1A1A1A] outline-none w-40 placeholder:text-[#C4C4C4]"
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*,audio/*"
+              className="hidden"
+              onChange={(e) => e.target.files && handleUpload(e.target.files)}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="inline-flex h-11 items-center rounded-none bg-neutral-900 px-5 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-neutral-800 disabled:opacity-50"
+            >
+              {uploading ? "Uploading…" : "Upload →"}
+            </button>
+          </div>
+        </div>
+        <p className="mt-5 font-mono text-[10px] uppercase tracking-[0.14em] text-neutral-500">
+          {assets.length} asset{assets.length !== 1 ? "s" : ""}
+        </p>
+      </section>
+
+      {/* Filters + search */}
+      <section className="border-t border-neutral-200 pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex gap-6">
+            {FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  type="button"
+                  onClick={() => setFilter(f.key)}
+                  className={cn(
+                    "flex items-center gap-2 border-b-2 pb-2 font-mono text-[10px] uppercase tracking-[0.18em] transition-colors",
+                    active
+                      ? "border-neutral-900 text-neutral-900"
+                      : "border-transparent text-neutral-500 hover:text-neutral-900"
+                  )}
+                >
+                  {f.label}
+                  <span
+                    className={cn(
+                      "tabular-nums",
+                      active ? "text-neutral-900" : "text-neutral-400"
+                    )}
+                  >
+                    {counts[f.key]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-3 border-b border-neutral-200 pb-1">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+              Search
+            </span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Name…"
+              className="h-7 w-44 border-none bg-transparent font-serif text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400"
             />
           </div>
-          <div className="flex rounded-lg border border-[#E5E7EB] overflow-hidden">
-            <button onClick={() => setView("grid")} className={cn("p-1.5", view === "grid" ? "bg-[#F3F4F6]" : "hover:bg-[#F9FAFB]")}>
-              <Grid3X3 className="h-4 w-4 text-[#6B7280]" />
-            </button>
-            <button onClick={() => setView("list")} className={cn("p-1.5", view === "list" ? "bg-[#F3F4F6]" : "hover:bg-[#F9FAFB]")}>
-              <LayoutList className="h-4 w-4 text-[#6B7280]" />
-            </button>
-          </div>
         </div>
-      </div>
+      </section>
 
       {/* Preview Modal */}
-      <AnimatePresence>
-        {previewAsset && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8"
+      {previewAsset && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setPreviewAsset(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-8"
+        >
+          <button
+            type="button"
             onClick={() => setPreviewAsset(null)}
+            aria-label="Close"
+            className="absolute right-6 top-6 h-10 w-10 border border-white/20 bg-white/10 font-mono text-[12px] text-white hover:bg-white/20"
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="relative max-w-4xl max-h-[85vh] w-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                onClick={() => setPreviewAsset(null)}
-                className="absolute -top-10 right-0 h-8 w-8 rounded-full bg-white/10 flex items-center justify-center text-white hover:bg-white/20 z-10"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            ×
+          </button>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[90vh] w-full max-w-5xl flex-col gap-5"
+          >
+            <div className="flex flex-1 items-center justify-center overflow-hidden">
               {previewAsset.type === "image" ? (
-                <img src={previewAsset.url} alt={previewAsset.name} className="w-full max-h-[80vh] object-contain rounded-xl" />
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={previewAsset.url}
+                  alt={previewAsset.name}
+                  className="max-h-[80vh] max-w-full object-contain"
+                />
               ) : previewAsset.type === "video" ? (
-                <video src={previewAsset.url} controls autoPlay className="w-full max-h-[80vh] rounded-xl" />
-              ) : previewAsset.type === "audio" ? (
-                <div className="bg-white rounded-xl p-8 text-center">
-                  <Music className="h-12 w-12 text-[#9CA3AF] mx-auto mb-4" />
-                  <p className="text-[16px] font-bold text-[#1A1A1A] mb-4">{previewAsset.name}</p>
-                  <audio src={previewAsset.url} controls autoPlay className="w-full" />
+                <video
+                  src={previewAsset.url}
+                  controls
+                  autoPlay
+                  className="max-h-[80vh] max-w-full"
+                />
+              ) : (
+                <div className="border border-white/15 bg-black px-12 py-10 text-center">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/60">
+                    Audio
+                  </p>
+                  <p className="mt-2 font-serif text-[16px] text-white">
+                    {previewAsset.name}
+                  </p>
+                  <audio src={previewAsset.url} controls autoPlay className="mt-6 w-full" />
                 </div>
-              ) : null}
-              <div className="mt-3 flex items-center justify-between">
-                <p className="text-[13px] text-white/70">{previewAsset.name}</p>
-                <a
-                  href={`/api/download?url=${encodeURIComponent(previewAsset.url)}`}
-                  className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-[12px] text-white hover:bg-white/20"
-                >
-                  <Download className="h-3.5 w-3.5" /> Download
-                </a>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              )}
+            </div>
+            <div className="flex items-center justify-between border-t border-white/15 pt-4">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/60">
+                {previewAsset.name}
+              </p>
+              <a
+                href={`/api/download?url=${encodeURIComponent(previewAsset.url)}`}
+                className="inline-flex h-9 items-center border border-white/25 px-4 font-mono text-[10px] uppercase tracking-[0.18em] text-white/80 hover:border-white hover:text-white"
+              >
+                Download
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-[#9CA3AF]" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="h-16 w-16 rounded-2xl bg-[#F3F4F6] flex items-center justify-center mb-4">
-            <Upload className="h-7 w-7 text-[#9CA3AF]" />
-          </div>
-          <h3 className="text-[18px] font-bold text-[#1A1A1A]">
-            {assets.length === 0 ? "No assets yet" : "No matches"}
-          </h3>
-          <p className="text-[14px] text-[#9CA3AF] mt-1 max-w-xs">
-            {assets.length === 0
-              ? "Upload files or generate content — all your images, videos, and audio will appear here."
-              : "Try a different search or filter."}
+        <section className="py-24 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+            Loading
           </p>
+        </section>
+      ) : filtered.length === 0 ? (
+        <section className="border-t border-neutral-200 py-24 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-500">
+            {assets.length === 0 ? "Empty asset library" : "No matches"}
+          </p>
+          <h3 className="mt-4 font-serif text-3xl leading-tight text-neutral-900">
+            {assets.length === 0 ? "Upload or generate." : "Nothing here."}
+          </h3>
           {assets.length === 0 && (
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="mt-6 flex items-center gap-2 rounded-full bg-[#1A1A1A] text-white px-6 py-2.5 text-[14px] font-semibold hover:bg-[#333]"
+              className="mt-8 inline-flex h-11 items-center rounded-none bg-neutral-900 px-5 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-neutral-800"
             >
-              <Upload className="h-4 w-4" /> Upload files
+              Upload files →
             </button>
           )}
-        </div>
-      ) : view === "grid" ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        </section>
+      ) : (
+        <section className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {filtered.map((asset) => (
-            <motion.div
+            <div
               key={asset.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
+              className="group cursor-pointer"
               onClick={() => setPreviewAsset(asset)}
-              className="group rounded-xl border border-[#F0F0F0] bg-white overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer"
             >
-              <div className="aspect-square relative bg-[#F9FAFB]">
+              <div className="relative aspect-square overflow-hidden border border-neutral-200 bg-neutral-100 transition-colors group-hover:border-neutral-900">
                 {asset.type === "image" ? (
-                  <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={asset.url}
+                    alt={asset.name}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                  />
                 ) : asset.type === "video" ? (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <video src={asset.url} className="w-full h-full object-cover" muted />
+                  <>
+                    <video
+                      src={asset.url}
+                      muted
+                      className="h-full w-full object-cover"
+                    />
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="h-10 w-10 rounded-full bg-white/80 flex items-center justify-center shadow">
-                        <Play className="h-4 w-4 text-[#1A1A1A] ml-0.5" fill="currentColor" />
-                      </div>
+                      <span className="border border-white/60 bg-black/40 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.18em] text-white">
+                        Video
+                      </span>
                     </div>
-                  </div>
+                  </>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Music className="h-8 w-8 text-[#D1D5DB]" />
+                  <div className="flex h-full w-full items-center justify-center">
+                    <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-neutral-400">
+                      Audio
+                    </span>
                   </div>
                 )}
-                {/* Hover actions */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-start justify-end p-2 opacity-0 group-hover:opacity-100">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(asset.id); }}
-                    className="h-7 w-7 rounded-lg bg-white/90 flex items-center justify-center text-[#EF4444] hover:bg-white"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(asset.id);
+                  }}
+                  className="absolute right-2 top-2 hidden h-7 border border-white/80 bg-black/60 px-2 font-mono text-[9px] uppercase tracking-[0.14em] text-white group-hover:inline-flex group-hover:items-center hover:bg-black/80"
+                >
+                  Delete
+                </button>
               </div>
-              <div className="px-3 py-2.5">
-                <p className="text-[12px] font-medium text-[#1A1A1A] truncate">{asset.name}</p>
-                <p className="text-[10px] text-[#9CA3AF] mt-0.5">
-                  {asset.source === "generation" || asset.source === "generated" ? "Generated" : asset.file_size ? formatBytes(asset.file_size) : "Uploaded"} &middot; {relativeTime(asset.created_at)}
-                </p>
-              </div>
-            </motion.div>
+              <p className="mt-3 truncate font-serif text-[13px] text-neutral-900">
+                {asset.name}
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-neutral-500">
+                {asset.source === "generation" || asset.source === "generated"
+                  ? "Generated"
+                  : asset.file_size
+                    ? formatBytes(asset.file_size)
+                    : "Uploaded"}
+                {" · "}
+                {relativeTime(asset.created_at)}
+              </p>
+            </div>
           ))}
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {filtered.map((asset) => {
-            const Icon = TYPE_ICONS[asset.type] || ImageIcon;
-            return (
-              <div key={asset.id} onClick={() => setPreviewAsset(asset)} className="flex items-center gap-4 rounded-xl border border-[#F0F0F0] bg-white px-4 py-3 hover:border-[#E5E7EB] hover:shadow-sm transition-all group cursor-pointer">
-                <div className="h-10 w-10 rounded-lg bg-[#F3F4F6] flex items-center justify-center shrink-0">
-                  {asset.type === "image" ? (
-                    <img src={asset.url} alt="" className="h-full w-full rounded-lg object-cover" />
-                  ) : (
-                    <Icon className="h-5 w-5 text-[#9CA3AF]" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-[#1A1A1A] truncate">{asset.name}</p>
-                  <p className="text-[11px] text-[#9CA3AF]">{asset.type} &middot; {asset.source === "generation" || asset.source === "generated" ? "Generated" : asset.file_size ? formatBytes(asset.file_size) : "Uploaded"} &middot; {relativeTime(asset.created_at)}</p>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <a href={asset.url} download className="h-8 w-8 rounded-lg flex items-center justify-center text-[#9CA3AF] hover:text-[#1A1A1A] hover:bg-[#F3F4F6]">
-                    <Download className="h-4 w-4" />
-                  </a>
-                  <button onClick={() => handleDelete(asset.id)} className="h-8 w-8 rounded-lg flex items-center justify-center text-[#9CA3AF] hover:text-[#EF4444] hover:bg-[#FEF2F2]">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        </section>
       )}
     </div>
   );

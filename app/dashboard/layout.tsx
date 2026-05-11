@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getAuth } from "@/lib/auth";
 import { getCredits } from "@/lib/credits";
-import { db } from "@/lib/db";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Header } from "@/components/dashboard/header";
 import { MobileBottomNav } from "@/components/dashboard/mobile-nav";
@@ -21,19 +20,6 @@ export default async function DashboardLayout({
   }
 
   const auth = await getAuth();
-
-  if (auth) {
-    const { data: brands } = await db
-      .from("brands")
-      .select("id")
-      .eq("org_id", auth.orgId)
-      .limit(1);
-
-    if (!brands || brands.length === 0) {
-      redirect("/onboarding");
-    }
-  }
-
   const userName = auth?.name ?? user.user_metadata?.name ?? user.email ?? "User";
   const credits = auth ? await getCredits(auth.orgId) : 0;
 

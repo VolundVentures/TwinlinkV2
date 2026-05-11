@@ -8,7 +8,16 @@ import type { AdCompositionProps, CaptionWord } from "@/remotion/lib/types";
 export const composeVideoDefinition: ToolDefinition = {
   name: "compose_video",
   description:
-    "Compose multiple video/image clips into a finished video ad with professional audio mixing.\n\n**Audio Architecture (CRITICAL — gets this wrong = bad video):**\n\n*Product Hero (Model A — voiceover-only):*\n- ONE continuous voiceover plays over ALL clips from start to finish\n- ALL clips: has_own_audio=false, is_lipsync=false\n- Music plays throughout at 0.15 volume\n- Voiceover at 0.85 volume\n\n*UGC Testimonial (Model B — talking + B-roll):*\n- Talking clips: is_lipsync=true, has_own_audio=true (lipsync audio at full volume)\n- B-roll clips: has_own_audio=false (SILENT — only music plays during B-roll)\n- NO continuous voiceover track — the lipsync IS the voice\n- Music: 0.12 during talking, 0.25 during B-roll\n- Typical: 3 talking + 2-3 B-roll clips intercut\n\n**Pacing & Transitions:**\n- UGC: hard cuts (\"cut\") — raw, authentic energy\n- Luxury/cinematic: crossfade — smooth, premium feel\n- Crossfade duration: 0.5s standard, up to 1.0s for luxury\n\n**Captions: OFF by default.** Never enable unless user explicitly requests.\n\nCosts 5 credits.",
+    "Compose the final cut from the shots.\n\n" +
+    "**ALWAYS pass `aspect_ratio` to match the user-chosen film spec from the director's context** — do not rely on defaults.\n\n" +
+    "**Audio architecture — 3 layers, all optional, all loaded with separate URLs:**\n" +
+    "- `voiceover_url` (VO via Runway → ElevenLabs `generate_voiceover`) — 0.85 volume, primary dialog.\n" +
+    "- `background_music_url` (Suno via `generate_music`) — 0.15 volume, melodic bed.\n" +
+    "- `ambient_sound_url` (Runway → ElevenLabs `generate_ambient`) — 0.18 volume, location texture. Loops if shorter than film. Adds enormous realism — use for ANY film with a real location.\n" +
+    "Clips themselves are silent (has_own_audio=false). For the rare lipsync shot, set is_lipsync=true on that clip.\n\n" +
+    "**Transitions:** hard cut by default. Use crossfade (0.5-1s) only when the film is slow/luxury and the director calls for it.\n\n" +
+    "**Captions: OFF by default.** Never enable unless user explicitly requests.\n\n" +
+    "Costs 5 credits.",
   input_schema: {
     type: "object",
     properties: {
@@ -17,6 +26,11 @@ export const composeVideoDefinition: ToolDefinition = {
         items: {
           type: "object",
           properties: {
+            shot_id: {
+              type: "string",
+              description:
+                "Shot identifier from write_script (e.g. 'shot_1', 'shot_2'). Used to sort clips into the correct cinematic sequence — the timeline will be ordered by shot_id ascending regardless of the array order you pass. Always include this.",
+            },
             url: {
               type: "string",
               description: "URL of the video or image asset.",
@@ -29,28 +43,28 @@ export const composeVideoDefinition: ToolDefinition = {
             label: {
               type: "string",
               description:
-                "Descriptive label: 'hook', 'talking_head', 'product_broll', 'cta', etc.",
+                "Descriptive label: 'establishing', 'pour_close', 'window_neon', 'end_card', etc.",
             },
             duration_seconds: {
               type: "number",
               description:
-                "Duration in seconds for this clip. For images, how long to show them. Default 5s.",
+                "Duration in seconds. For video clips this MUST match the generate_video duration_seconds exactly.",
             },
             has_own_audio: {
               type: "boolean",
               description:
-                "Set to true for clips that have ANY audio (ambient SFX from generate_audio=true, or lipsync). Set to false for silent B-roll/images. When true, the clip's native audio plays at LOW ambient volume (0.06) under the voiceover — unless is_lipsync is also true.",
+                "True if the video clip was generated with generate_audio=true (ambient SFX baked in). False for silent clips and images. When true, native audio plays at LOW ambient volume under any voiceover.",
             },
             is_lipsync: {
               type: "boolean",
               description:
-                "Set to true ONLY for lip-synced clips (from lipsync_video or HeyGen avatar). These play at FULL volume and MUTE the voiceover during their duration. Default false.",
+                "Only for lip-synced clips. Full volume, mutes voiceover during playback. Default false.",
             },
           },
-          required: ["url", "type", "has_own_audio"],
+          required: ["shot_id", "url", "type", "has_own_audio", "duration_seconds"],
         },
         description:
-          "Array of clips to compose. Arranged on timeline in order.",
+          "Array of clips. Will be sorted by shot_id ascending before rendering — you should pass shot_id on every clip so the final edit respects the script order.",
       },
       voiceover_url: {
         type: "string",
@@ -61,6 +75,11 @@ export const composeVideoDefinition: ToolDefinition = {
         type: "string",
         description:
           "Optional background music URL. Plays underneath the voiceover at low volume (-18 to -12 dB, ~0.12). Should be instrumental only.",
+      },
+      ambient_sound_url: {
+        type: "string",
+        description:
+          "Optional ambient sound bed URL — room tone / location texture generated by `generate_ambient` (Runway → ElevenLabs text_to_sound_v2). Plays beneath everything else at ~0.18 volume. Loops automatically if shorter than the film. Adds enormous realism to AI-rendered film — strongly preferred for any location-based scene (cafe / street / forest / interior).",
       },
       text_overlays: {
         type: "array",
@@ -79,7 +98,8 @@ export const composeVideoDefinition: ToolDefinition = {
           },
           required: ["text", "position"],
         },
-        description: "Text overlays (headlines, CTAs) to render on the video.",
+        description:
+          "Small mid-film text burn-ins only (chapter titles, location labels, translations). Do NOT use for the end card — the end card is a proper shot generated via generate_image / generate_keyframe + generate_video and included in the clips array. Most cinematic films use zero text overlays.",
       },
       captions: {
         type: "boolean",
@@ -107,8 +127,15 @@ export const composeVideoDefinition: ToolDefinition = {
       },
       aspect_ratio: {
         type: "string",
-        enum: ["16:9", "9:16", "1:1"],
-        description: "Output aspect ratio. Default '9:16'.",
+        enum: ["16:9", "9:16", "1:1", "21:9", "4:3", "3:4"],
+        description:
+          "Output aspect ratio. MUST match the film spec from the user's brief (available in the agent context). Do not rely on defaults.",
+      },
+      letterbox: {
+        type: "string",
+        enum: ["none", "2.39:1"],
+        description:
+          "Optional. For 16:9 films intended for cinematic 2.39:1 delivery, set to '2.39:1' to burn anamorphic bars top/bottom. Default 'none'.",
       },
       brand_watermark: {
         type: "boolean",
@@ -130,7 +157,8 @@ export const composeVideoTool: ToolHandler = async (
   context,
   emitter
 ): Promise<ToolResult> => {
-  const clips = input.clips as Array<{
+  const rawClips = input.clips as Array<{
+    shot_id?: string;
     url: string;
     type: "video" | "image";
     label?: string;
@@ -138,8 +166,22 @@ export const composeVideoTool: ToolHandler = async (
     has_own_audio?: boolean;
     is_lipsync?: boolean;
   }>;
+
+  // Sort by shot_id ascending so the cut respects the script regardless of the
+  // order the agent built its clips array in. shot_ids look like "shot_1", "shot_2".
+  function shotIdOrder(s?: string): number {
+    if (!s) return Number.POSITIVE_INFINITY;
+    const m = s.match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : Number.POSITIVE_INFINITY;
+  }
+  const clips = [...rawClips].sort((a, b) => shotIdOrder(a.shot_id) - shotIdOrder(b.shot_id));
+  console.log(
+    "[tool:compose_video] Clip order after shot_id sort:",
+    clips.map((c) => `${c.shot_id || "?"}:${c.label || c.type}`).join(" → ")
+  );
   const voiceoverUrl = input.voiceover_url as string | undefined;
   const backgroundMusicUrl = input.background_music_url as string | undefined;
+  const ambientSoundUrl = input.ambient_sound_url as string | undefined;
   const textOverlays = input.text_overlays as Array<{
     text: string;
     position: string;
@@ -156,7 +198,23 @@ export const composeVideoTool: ToolHandler = async (
   // Captions OFF by default — agent must explicitly enable for UGC
   const addCaptions = input.captions === true;
   const transition = (input.transition as string) || "crossfade";
-  const aspectRatio = (input.aspect_ratio as string) || "9:16";
+  // User's UI choice is the source of truth. Agent input is a fallback only —
+  // this prevents the agent from silently rendering 9:16 when the user picked 16:9.
+  const aspectRatio =
+    context.aspectRatio || (input.aspect_ratio as string) || "";
+  const VALID_ASPECTS = new Set(["16:9", "9:16", "1:1", "21:9", "4:3", "3:4"]);
+  if (!VALID_ASPECTS.has(aspectRatio)) {
+    return {
+      success: false,
+      content: `compose_video received invalid aspect_ratio "${aspectRatio}". The film spec was not propagated from the user's brief. Must be one of: 16:9, 9:16, 1:1, 21:9, 4:3, 3:4.`,
+    };
+  }
+  if (input.aspect_ratio && context.aspectRatio && input.aspect_ratio !== context.aspectRatio) {
+    console.warn(
+      `[tool:compose_video] aspect_ratio mismatch — agent passed ${input.aspect_ratio} but user chose ${context.aspectRatio}. Using user choice.`
+    );
+  }
+  const letterbox = (input.letterbox as string) || "none";
   const addWatermark = (input.brand_watermark as boolean) || false;
   const voiceoverDurationSeconds = input.voiceover_duration_seconds as number | undefined;
 
@@ -170,7 +228,8 @@ export const composeVideoTool: ToolHandler = async (
     "captions:", addCaptions,
     "watermark:", addWatermark,
     "voiceover:", voiceoverUrl ? voiceoverUrl.slice(0, 60) : "NONE",
-    "music:", backgroundMusicUrl ? backgroundMusicUrl.slice(0, 60) : "NONE"
+    "music:", backgroundMusicUrl ? backgroundMusicUrl.slice(0, 60) : "NONE",
+    "ambient:", ambientSoundUrl ? ambientSoundUrl.slice(0, 60) : "NONE"
   );
 
   // Validate inputs early
@@ -189,18 +248,34 @@ export const composeVideoTool: ToolHandler = async (
     };
   }
 
+  const imageClips = clips.filter((c) => c.type !== "video");
+  if (imageClips.length > 0) {
+    return {
+      success: false,
+      content: `${imageClips.length} clip(s) are not videos. compose_video only accepts rendered video assets from generate_video — never pass keyframe/image URLs as clips. If a shot wasn't rendered, render it first before composing.`,
+    };
+  }
+
+  const missingShotId = clips.filter((c) => !c.shot_id);
+  if (missingShotId.length > 0) {
+    return {
+      success: false,
+      content: `${missingShotId.length} clip(s) missing shot_id. Every clip must include its shot_id from write_script so the timeline orders correctly.`,
+    };
+  }
+
   // Pre-compose validation — WARN on missing music but don't block
   // Blocking caused deadlocks when Suno was down — better to have video without music than no video
   if (!backgroundMusicUrl) {
     console.warn("[tool:compose_video] WARNING: No background_music_url. Video will have no background music.");
   }
 
-  if (!voiceoverUrl && clips.every(c => !c.has_own_audio)) {
-    console.error("[tool:compose_video] BLOCKED: No audio source at all.");
-    return {
-      success: false,
-      content: "compose_video BLOCKED: No voiceover_url and no clips with own audio. The video would be completely silent. Call generate_voiceover first.",
-    };
+  // Cinematic films are often intentionally near-silent (music + sparse SFX).
+  // If the director chose no VO, no music, and clips have no baked audio — warn but don't block.
+  if (!voiceoverUrl && !backgroundMusicUrl && clips.every((c) => !c.has_own_audio)) {
+    console.warn(
+      "[tool:compose_video] Heads-up: no VO, no music, and all clips are silent. Final film will be silent. If this isn't intentional, call generate_music and/or generate_voiceover first."
+    );
   }
 
   // Validate clip durations exist
@@ -240,9 +315,7 @@ export const composeVideoTool: ToolHandler = async (
       };
     });
 
-    // CLIP ORDER: Respect the agent's order. The agent is the creative director.
-    // No automatic reordering — clips play in the exact order provided.
-    console.log("[tool:compose_video] Clip order (agent-defined):", compositionClips.map((c) => `${c.label}(${c.hasOwnAudio ? "talk" : "broll"})`).join(" → "));
+    console.log("[tool:compose_video] Clip order (after shot_id sort):", compositionClips.map((c) => `${c.label}(${c.hasOwnAudio ? "talk" : "broll"})`).join(" → "));
 
     // VOICEOVER START: Always frame 0.
     // The Remotion composition already mutes voiceover during has_own_audio clips
@@ -258,6 +331,11 @@ export const composeVideoTool: ToolHandler = async (
       clips: compositionClips,
       transition: transition as AdCompositionProps["transition"],
       fps,
+      letterbox: letterbox as AdCompositionProps["letterbox"],
+      // aspectRatio drives calculateMetadata's width/height override. The
+      // deployed Remotion site only needs ONE composition ID (AdComposition)
+      // — aspect is resolved from inputProps at render time.
+      aspectRatio: aspectRatio as AdCompositionProps["aspectRatio"],
     };
 
     // Voiceover — starts at frame 0, plays continuously.
@@ -287,6 +365,19 @@ export const composeVideoTool: ToolHandler = async (
       compositionProps.backgroundMusic = {
         url: backgroundMusicUrl,
         volume: 0.15, // Professional broadcast ratio: ~8 LU below voiceover
+      };
+    }
+
+    // Ambient sound bed — room tone / location texture. Sits BELOW music so
+    // the mix layers VO (0.85) > music (0.15) > ambient (0.18, but on a
+    // separate track that survives music swells because ambient is broadband
+    // texture, not melody). When music is absent the ambient becomes the
+    // primary soundscape; we don't bump volume in that case — the AI text-
+    // to-sound output is usually loud enough at 0.18 to ground the scene.
+    if (ambientSoundUrl) {
+      compositionProps.ambientSound = {
+        url: ambientSoundUrl,
+        volume: 0.18,
       };
     }
 
@@ -377,13 +468,12 @@ export const composeVideoTool: ToolHandler = async (
       };
     }
 
-    // Choose composition based on aspect ratio
-    const compositionId =
-      aspectRatio === "16:9"
-        ? "AdComposition-Landscape"
-        : aspectRatio === "1:1"
-          ? "AdComposition-Square"
-          : "AdComposition";
+    // ALWAYS render via the single AdComposition id. Dimensions are
+    // resolved at render-time from inputProps.aspectRatio via
+    // calculateAdMetadata. This eliminates the per-aspect composition
+    // lookup (which silently fell back to the default 9:16 composition
+    // when the deployed S3 site was out of sync).
+    const compositionId = "AdComposition";
 
     emitter.send("tool_progress", {
       tool: "compose_video",
@@ -421,6 +511,7 @@ export const composeVideoTool: ToolHandler = async (
         storage_path: result.url,
         public_url: result.url,
         metadata: {
+          role: "final_film",
           asset_category: "composed_video",
           source_clips: clips.map((c) => ({
             url: c.url,
@@ -485,10 +576,12 @@ export const composeVideoTool: ToolHandler = async (
           type: "video",
           url: result.url,
           metadata: {
+            role: "final_film", // critical — the director UI routes to FinalView on this
             asset_category: "composed_video",
             aspect_ratio: aspectRatio,
             duration_seconds: totalDuration,
             transition,
+            letterbox,
           },
         },
       ],

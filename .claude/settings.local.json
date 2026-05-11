@@ -153,7 +153,10 @@
       "Bash(claude skill:*)",
       "Bash(claude install:*)",
       "Bash(claude install-skill:*)",
-      "WebFetch(domain:skywork.ai)"
+      "WebFetch(domain:skywork.ai)",
+      "Bash(npm cache *)",
+      "Bash(break)",
+      "Bash(node --env-file=.env scripts/debug-avatar-create.mjs yuki-sato)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Zakaria\\TwinLinkV2\\app\\api\\calendar\\posts",

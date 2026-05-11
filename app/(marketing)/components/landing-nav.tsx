@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { MenuIcon, XIcon } from "lucide-react";
 
-const navLinks = [
-  { label: "Features", href: "#features" },
-  { label: "How it Works", href: "#how-it-works" },
+const NAV = [
+  { label: "Cast", href: "#cast" },
+  { label: "Reel", href: "#reel" },
+  { label: "Method", href: "#method" },
   { label: "Pricing", href: "#pricing" },
 ];
 
@@ -18,137 +19,145 @@ export function LandingNav() {
 
   useEffect(() => {
     function onScroll() {
-      setScrolled(window.scrollY > 20);
+      setScrolled(window.scrollY > 40);
     }
-    window.addEventListener("scroll", onScroll);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Lock body scroll when mobile menu is open
   useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
   }, [mobileOpen]);
 
-  function handleNavClick(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+  function click(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
     if (href.startsWith("#")) {
       e.preventDefault();
       setMobileOpen(false);
-      const el = document.querySelector(href);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      document.querySelector(href)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }
 
+  const onDark = !scrolled; // hero is dark, switch nav colors
+
   return (
     <>
-      <nav
+      <motion.nav
+        initial={{ y: -40, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.1 }}
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+          "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
           scrolled
-            ? "bg-white/80 backdrop-blur-xl border-b border-black/5 shadow-sm"
+            ? "border-b border-neutral-200 bg-white/85 backdrop-blur-xl"
             : "bg-transparent"
         )}
       >
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5">
-            <img src="/logo.svg" alt="TwinLink" className="h-8 w-8" />
-            <span className="text-xl font-bold tracking-tight text-black">
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-6">
+          <Link href="/" className="flex items-baseline gap-2">
+            <span
+              className={cn(
+                "font-serif text-[22px] tracking-tight transition-colors",
+                onDark ? "text-white" : "text-neutral-900"
+              )}
+            >
               TwinLink
+            </span>
+            <span
+              className={cn(
+                "font-mono text-[9px] uppercase tracking-[0.24em] transition-colors",
+                onDark ? "text-white/50" : "text-neutral-400"
+              )}
+            >
+              director
             </span>
           </Link>
 
-          {/* Desktop links */}
-          <div className="hidden items-center gap-8 md:flex">
-            {navLinks.map((item) => (
+          <div className="hidden items-center gap-10 md:flex">
+            {NAV.map((item) => (
               <a
                 key={item.label}
                 href={item.href}
-                onClick={(e) => handleNavClick(e, item.href)}
-                className="text-sm text-black/50 hover:text-black transition-colors"
+                onClick={(e) => click(e, item.href)}
+                className={cn(
+                  "group relative font-mono text-[10px] uppercase tracking-[0.24em] transition-colors",
+                  onDark
+                    ? "text-white/70 hover:text-white"
+                    : "text-neutral-500 hover:text-neutral-900"
+                )}
               >
                 {item.label}
+                <span
+                  className={cn(
+                    "absolute -bottom-1 left-0 block h-px w-0 transition-all duration-300 group-hover:w-full",
+                    onDark ? "bg-white" : "bg-neutral-900"
+                  )}
+                />
               </a>
             ))}
           </div>
 
-          {/* Desktop CTAs */}
-          <div className="hidden md:flex items-center gap-3">
-            <Link href="/login">
-              <button className="text-sm text-black/60 hover:text-black transition-colors px-4 py-2">
-                Log in
-              </button>
-            </Link>
-            <Link href="/signup">
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                className="rounded-full bg-[#4F6247] text-white text-sm font-medium px-5 py-2.5 hover:bg-[#3d4a3b] transition-colors"
-              >
-                Get started
-              </motion.button>
+          <div className="hidden items-center gap-6 md:flex">
+            <Link
+              href="/login"
+              className={cn(
+                "inline-flex h-10 items-center px-5 font-mono text-[10px] uppercase tracking-[0.24em] transition-colors",
+                onDark
+                  ? "bg-white text-neutral-900 hover:bg-neutral-200"
+                  : "bg-neutral-900 text-white hover:bg-neutral-800"
+              )}
+            >
+              Sign in
             </Link>
           </div>
 
-          {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="flex md:hidden h-10 w-10 items-center justify-center rounded-lg text-black/60 hover:text-black hover:bg-black/[0.03] transition-colors"
-            aria-label="Toggle menu"
-          >
-            {mobileOpen ? (
-              <XIcon className="h-5 w-5" />
-            ) : (
-              <MenuIcon className="h-5 w-5" />
+            className={cn(
+              "flex h-10 w-10 items-center justify-center transition-colors md:hidden",
+              onDark ? "text-white" : "text-neutral-900"
             )}
+            aria-label="Menu"
+          >
+            {mobileOpen ? <XIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
           </button>
         </div>
-      </nav>
+      </motion.nav>
 
-      {/* Mobile menu overlay */}
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-white flex flex-col pt-20 px-6"
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-40 flex flex-col bg-neutral-950 px-6 pt-24 text-white md:hidden"
           >
-            <div className="flex flex-col gap-1 mt-4">
-              {navLinks.map((item, i) => (
+            <div className="flex flex-col">
+              {NAV.map((item, i) => (
                 <motion.a
                   key={item.label}
                   href={item.href}
-                  onClick={(e) => handleNavClick(e, item.href)}
-                  initial={{ opacity: 0, y: 12 }}
+                  onClick={(e) => click(e, item.href)}
+                  initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="py-4 text-[18px] font-medium text-black/70 hover:text-black border-b border-black/[0.05] transition-colors"
+                  transition={{ delay: 0.05 + i * 0.06, ease: [0.22, 1, 0.36, 1] }}
+                  className="border-b border-white/10 py-6 font-serif text-[40px] leading-none tracking-tight text-white"
                 >
                   {item.label}
                 </motion.a>
               ))}
             </div>
-
-            <div className="mt-8 flex flex-col gap-3">
-              <Link href="/signup" onClick={() => setMobileOpen(false)}>
-                <button className="w-full rounded-full bg-[#4F6247] text-white text-[15px] font-medium py-3.5 hover:bg-[#3d4a3b] transition-colors">
-                  Get started
-                </button>
-              </Link>
-              <Link href="/login" onClick={() => setMobileOpen(false)}>
-                <button className="w-full rounded-full border border-black/10 text-[15px] font-medium py-3.5 text-black/60 hover:text-black transition-colors">
-                  Log in
-                </button>
+            <div className="mt-10 flex flex-col gap-3">
+              <Link
+                href="/login"
+                onClick={() => setMobileOpen(false)}
+                className="flex h-14 items-center justify-center bg-white font-mono text-[11px] uppercase tracking-[0.22em] text-neutral-900"
+              >
+                Sign in
               </Link>
             </div>
           </motion.div>

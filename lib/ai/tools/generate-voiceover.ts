@@ -1,36 +1,100 @@
+// generate_voiceover — Runway-routed ElevenLabs TTS.
+//
+// Architecture (May 2026 — switched from direct ElevenLabs to Runway):
+//   1. Voice resolution priority:
+//      a) lead director's custom voice (persona.voice.voiceId) when populated
+//      b) explicit voice_id passed by the agent
+//      c) style-keyword pick from the curated ElevenLabs voice catalog
+//      d) safe fallback (a warm female voice)
+//   2. Send to Runway `textToSpeech` (model: eleven_multilingual_v2) — this
+//      is ElevenLabs under the hood, so credit + cost telemetry rolls up to
+//      the Runway account.
+//   3. Mirror the output URL into Supabase Storage so the Remotion compose
+//      step has a stable URL that never expires.
+
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
-import { getNextVariantNumber } from "./types";
-import { generateSpeech } from "@/lib/generation/tts";
-import { uploadToFal } from "@/lib/generation/fal-video";
+import { getNextVariantNumber, TOOL_CREDIT_COSTS } from "./types";
+import { textToSpeech as runwayTextToSpeech } from "@/lib/runway";
+import { persistAsset } from "@/lib/generation/persist-asset";
 import { db } from "@/lib/db";
-import { TOOL_CREDIT_COSTS } from "./types";
+
+// Curated ElevenLabs voice catalog — same IDs as the legacy TTS module so the
+// behaviour transfers 1:1. Runway's `eleven_multilingual_v2` model accepts
+// ElevenLabs voice IDs directly because Runway delegates to ElevenLabs.
+const VOICE_CATALOG = {
+  hale:        { id: "wWWn96OtTHu1sn8SRGEr", style: "expressive, deep, emotive",       bestFor: "storytelling, emotional, brand films" },
+  b_giffen:    { id: "Gpn64ViAPE8OHwnBHpEs", style: "professional, narration",         bestFor: "explainers, eLearning, corporate" },
+  clemens:     { id: "eJHgBguIWw9PtA4GHbSP", style: "loud, energetic, attention-grabbing", bestFor: "hooks, hype, energetic" },
+  christopher: { id: "SSfU0eLfP3qeuR4j2bwD", style: "smooth, deep, engaging",          bestFor: "premium, luxury" },
+  koraly:      { id: "rbFGGoDXFHtVghjHuS3E", style: "promotional, polished",           bestFor: "promo, marketing, launches" },
+  camille:     { id: "Da9VfudgKUvFOKayCiue", style: "content creator, casual",         bestFor: "UGC, social, conversational" },
+  kat:         { id: "RiK8PTtVIeKKoFFTk9fg", style: "sharp, smart, educator",          bestFor: "tutorials, educational" },
+  sophie:      { id: "BewlJwjEWiFLWoXrbGMf", style: "engaging, warm",                  bestFor: "advertising, social, friendly" },
+} as const;
+type VoiceName = keyof typeof VOICE_CATALOG;
+
+function pickByStyle(style?: string): string {
+  const s = (style || "").toLowerCase();
+  if (s.includes("energetic") || s.includes("hype") || s.includes("loud")) return VOICE_CATALOG.clemens.id;
+  if (s.includes("storytelling") || s.includes("emotive") || s.includes("emotional")) return VOICE_CATALOG.hale.id;
+  if (s.includes("premium") || s.includes("luxury") || s.includes("smooth") || s.includes("deep")) return VOICE_CATALOG.christopher.id;
+  if (s.includes("professional") || s.includes("corporate") || s.includes("narration")) return VOICE_CATALOG.b_giffen.id;
+  if (s.includes("ugc") || s.includes("casual") || s.includes("creator") || s.includes("content")) return VOICE_CATALOG.camille.id;
+  if (s.includes("promo") || s.includes("launch") || s.includes("polished")) return VOICE_CATALOG.koraly.id;
+  if (s.includes("educator") || s.includes("tutorial") || s.includes("sharp")) return VOICE_CATALOG.kat.id;
+  if (s.includes("warm") || s.includes("friendly") || s.includes("social")) return VOICE_CATALOG.sophie.id;
+  if (s.includes("female")) return VOICE_CATALOG.sophie.id;
+  if (s.includes("male")) return VOICE_CATALOG.christopher.id;
+  return VOICE_CATALOG.hale.id;
+}
+
+// Accept catalog names ("Hale", "christopher"), ElevenLabs IDs, or Runway
+// custom IDs — return whatever should go on the wire.
+function resolveVoiceId(idOrName: string): string {
+  const lower = idOrName.toLowerCase();
+  if (lower in VOICE_CATALOG) return VOICE_CATALOG[lower as VoiceName].id;
+  // Already an ID-shaped string — passed through unchanged.
+  return idOrName;
+}
 
 export const generateVoiceoverDefinition: ToolDefinition = {
   name: "generate_voiceover",
   description:
-    "Generate voiceover audio from text. Returns a hosted audio URL. Costs 3 credits.\n\n**Voice-Emotion Mapping (choose based on creative direction):**\n- 'ugc'/'casual' → Camille (F) — content creator energy, confessional, relatable\n- 'warm'/'friendly' → Sophie (F) — social media warmth, trustworthy friend\n- 'promo'/'polished' → Koraly (F) — launch energy, polished confidence\n- 'educator'/'tutorial' → Kat (F) — sharp, smart, authoritative\n- 'premium'/'luxury' → Christopher (M) — smooth deep voice, late-night confession intimacy\n- 'storytelling'/'emotional' → Hale (M) — expressive, atmospheric, makes you lean in\n- 'energetic'/'hype' → Clemens (M) — loud, attention-grabbing, sports energy\n- 'professional'/'corporate' → B.Giffen (M) — steady narration, trust\n- 'darija'/'moroccan' → Ghizlane (F) — Moroccan Darija via ElevenLabs\n\n**When to use which voice:**\n- Luxury/cinematic product ad → Christopher or Hale (slow, intimate)\n- UGC testimonial → Camille or Sophie (casual, authentic)\n- Sports/aggressive → Clemens (fast, punchy)\n- Arabic → Gemini TTS used automatically (best quality)\n\n**For UGC:** Generate SEPARATE voiceover for each talking section's dialogue text. These get lipsync'd individually. Do NOT generate one continuous VO for UGC.\n**For Product Hero:** Generate ONE continuous voiceover covering the full script.\n\n**Use the SAME voice_style across ALL calls in one ad** for consistency.",
+    "Generate voiceover audio via Runway-routed ElevenLabs (eleven_multilingual_v2). Returns a hosted audio URL. Costs 3 credits.\n\n" +
+    "**Voice resolution priority:**\n" +
+    "1. When the lead director has a custom voice configured (most films), THAT voice is used — pass nothing for voice_id and the tool auto-resolves.\n" +
+    "2. Otherwise pass `voice_id` directly OR `voice_style` for catalog-based pick.\n\n" +
+    "**Voice catalog (for style-based picks):**\n" +
+    "- 'storytelling' / 'emotional' → Hale (M) — expressive, atmospheric\n" +
+    "- 'premium' / 'luxury' → Christopher (M) — smooth deep, intimate\n" +
+    "- 'professional' / 'corporate' → B.Giffen (M) — steady narration\n" +
+    "- 'energetic' / 'hype' → Clemens (M) — punchy\n" +
+    "- 'warm' / 'friendly' → Sophie (F) — social\n" +
+    "- 'promo' / 'polished' → Koraly (F) — launch energy\n" +
+    "- 'casual' / 'ugc' → Camille (F) — conversational\n" +
+    "- 'educator' / 'sharp' → Kat (F) — instructional\n\n" +
+    "**Guidance:** ONE continuous voiceover for the full script. Many Cannes-worthy films have no voiceover — if the treatment says 'no VO', skip this tool entirely.",
   input_schema: {
     type: "object",
     properties: {
       text: {
         type: "string",
         description:
-          "The text to convert to speech. Can be any length — longer scripts generate longer audio.",
+          "The text to speak. Can be any length — longer scripts produce longer audio.",
       },
       voice_style: {
         type: "string",
         description:
-          "Style keywords to select the best voice: 'ugc', 'casual', 'premium', 'energetic', 'storytelling', 'warm', 'promo', 'educator', 'professional', 'darija'. Can combine with gender: 'female_casual', 'male_premium'. See description for full catalog.",
+          "Catalog pick by style keyword. Used only when the lead director has no custom voice AND no explicit voice_id is given.",
       },
       voice_id: {
         type: "string",
         description:
-          "Direct ElevenLabs voice ID — bypasses style-based selection. Use this when you want a specific voice from the catalog or a custom voice.",
+          "Direct override — ElevenLabs voice ID, catalog name (e.g. 'Hale'), or Runway custom voice ID. Overrides director voice + style.",
       },
       language: {
         type: "string",
-        description:
-          "Language code (e.g. 'en', 'fr', 'ar', 'ar-MA'). Arabic uses Gemini TTS unless voice_id is provided.",
+        description: "Language code. Defaults to 'en'.",
       },
     },
     required: ["text"],
@@ -42,132 +106,101 @@ export const generateVoiceoverTool: ToolHandler = async (
   context,
   emitter
 ): Promise<ToolResult> => {
-  const text = input.text as string;
+  const text = (input.text as string).trim();
+  const explicitVoiceId = (input.voice_id as string) || undefined;
   const voiceStyle = (input.voice_style as string) || undefined;
-  const voiceId = (input.voice_id as string) || undefined;
   const language = (input.language as string) || context.language || "en";
 
-  // Reject text that's too short for the video duration
-  const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
-  const estimatedAudioSec = Math.round(wordCount / 2.5);
-
-  // Hard reject: less than 25 words is too short for any ad voiceover
+  const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
   if (wordCount < 25) {
     return {
       success: false,
-      content: `Voiceover text is only ${wordCount} words (~${estimatedAudioSec}s of audio). This is too short — the voiceover must cover at least 60% of the video. For a 25-30s ad, write at least 40-50 words. Did you pass only one section's text instead of the full script? Pass the FULL voiceover text.`,
+      content: `Voiceover text is only ${wordCount} words. Too short for any ad voiceover — write at least 40-50 words for a 25-30s film. Pass the FULL voiceover script.`,
     };
   }
-
-  // No aggressive truncation — let the agent control script length.
-  // The agent knows the video duration and should write appropriately.
   if (wordCount > 200) {
-    console.warn(`[tool:generate_voiceover] Very long text: ${wordCount} words (~${Math.round(wordCount / 2.5)}s). This may exceed video duration.`);
+    console.warn(
+      `[tool:generate_voiceover] very long text: ${wordCount} words (~${Math.round(wordCount / 2.5)}s).`
+    );
+  }
+
+  // Voice resolution. Director's custom voice wins unless the agent passed
+  // an explicit override — those overrides are typically for stylistic
+  // co-direction (e.g. "give me a female narrator for this one beat").
+  let voiceId: string;
+  let voiceSource: string;
+  const personaVoice = context.leadDirector?.voice;
+  if (explicitVoiceId) {
+    voiceId = resolveVoiceId(explicitVoiceId);
+    voiceSource = `explicit override (${explicitVoiceId})`;
+  } else if (
+    personaVoice &&
+    personaVoice.type === "custom" &&
+    personaVoice.voiceId
+  ) {
+    voiceId = personaVoice.voiceId;
+    voiceSource = `lead director (${context.leadDirector?.name ?? "?"} custom voice)`;
+  } else if (personaVoice && personaVoice.type === "preset") {
+    voiceId = personaVoice.presetId;
+    voiceSource = `lead director (preset ${personaVoice.presetId})`;
+  } else {
+    voiceId = pickByStyle(voiceStyle);
+    voiceSource = `style catalog (${voiceStyle || "default"})`;
   }
 
   console.log(
-    "[tool:generate_voiceover] Text length:",
-    text.length,
-    "words:",
-    text.split(/\s+/).length,
-    "language:",
-    language,
-    "style:",
-    voiceStyle
+    "[tool:generate_voiceover]",
+    "words:", wordCount,
+    "language:", language,
+    "voice:", voiceSource,
+    "voiceId:", voiceId
   );
-
-  const isArabic = language === "ar" || language === "arabic";
 
   emitter.send("tool_progress", {
     tool: "generate_voiceover",
     generationId: context.generationId,
     status: "generating",
-    message: `Generating voiceover (${language}) with ${isArabic ? "Gemini TTS" : "ElevenLabs"}...`,
+    message: `Generating voiceover via Runway → ElevenLabs (${voiceSource})…`,
   });
 
   try {
-    // Generate speech using the TTS router
-    const { audioBuffer, format, durationEstimate } = await generateSpeech({
+    const task = await runwayTextToSpeech({
       text,
-      language,
-      style: voiceStyle,
-      voice_id: voiceId,
+      voiceId,
+      generationId: context.generationId,
+      description: `voiceover [${voiceSource}] ${text.slice(0, 60)}`,
     });
 
-    console.log(
-      "[tool:generate_voiceover] Audio generated, size:",
-      audioBuffer.byteLength,
-      "format:",
-      format
-    );
+    const rawUrl = Array.isArray(task.output)
+      ? task.output[0]
+      : (task.output as unknown as string);
+    if (!rawUrl) {
+      return {
+        success: false,
+        content:
+          "Runway voiceover task returned no output URL. Try again, or fall back to a different voice_style.",
+      };
+    }
 
     emitter.send("tool_progress", {
       tool: "generate_voiceover",
       generationId: context.generationId,
       status: "uploading",
-      message: "Uploading voiceover to storage...",
+      message: "Mirroring voiceover to Supabase Storage…",
     });
 
-    // Upload audio to Supabase Storage for a PERMANENT URL
-    // (fal.ai storage URLs expire after ~5 minutes, causing Remotion render failures)
-    const contentType = format === "wav" ? "audio/wav" : "audio/mpeg";
-    const extension = format === "wav" ? "wav" : "mp3";
-    const fileName = `voiceover-${context.generationId}-${Date.now()}.${extension}`;
-    let audioUrl: string;
+    // Mirror to Supabase so compose_video has a stable URL. Runway's CDN URLs
+    // are believed stable but the mirror is cheap insurance against render-
+    // time 404s — Remotion failures are the worst kind because they show up
+    // 60+ seconds after the user clicked.
+    const audioUrl = await persistAsset(rawUrl, {
+      generationId: context.generationId,
+      kind: "audio",
+      basename: `voiceover-${context.generationId}`,
+    });
 
-    try {
-      const { db: supabase } = await import("@/lib/db");
+    const durationEstimate = Math.round(wordCount / 2.5);
 
-      // Ensure the bucket exists (create if first time)
-      const { error: bucketError } = await supabase.storage.createBucket("voiceovers", {
-        public: true,
-        allowedMimeTypes: ["audio/mpeg", "audio/wav", "audio/mp3"],
-      });
-      // Ignore "already exists" errors
-      if (bucketError && !bucketError.message.includes("already exists")) {
-        console.warn("[tool:generate_voiceover] Bucket creation warning:", bucketError.message);
-      }
-
-      const { error: uploadError } = await supabase.storage
-        .from("voiceovers")
-        .upload(fileName, audioBuffer, {
-          contentType,
-          upsert: true,
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("voiceovers")
-        .getPublicUrl(fileName);
-
-      audioUrl = publicUrlData.publicUrl;
-      console.log("[tool:generate_voiceover] Uploaded to Supabase Storage:", audioUrl.slice(0, 80));
-    } catch (uploadErr) {
-      // Retry Supabase once before falling back
-      console.warn("[tool:generate_voiceover] Supabase upload failed, retrying:", uploadErr);
-      try {
-        const { db: supabase2 } = await import("@/lib/db");
-        const retryName = `voiceover-${context.generationId}-retry-${Date.now()}.${extension}`;
-        const { error: retryError } = await supabase2.storage.from("voiceovers").upload(retryName, audioBuffer, { contentType, upsert: true });
-        if (retryError) throw retryError;
-        const { data: retryUrl } = supabase2.storage.from("voiceovers").getPublicUrl(retryName);
-        audioUrl = retryUrl.publicUrl;
-        console.log("[tool:generate_voiceover] Supabase retry succeeded:", audioUrl.slice(0, 80));
-      } catch {
-        // Fallback to fal.ai (TEMPORARY — will expire, risky for long pipelines)
-        console.error("[tool:generate_voiceover] CRITICAL: Supabase failed twice. Using fal.ai temporary URL — may expire during render.");
-        try {
-          audioUrl = await uploadToFal(audioBuffer, contentType, fileName);
-        } catch {
-          throw new Error("Failed to upload voiceover audio to any storage. Cannot proceed.");
-        }
-      }
-    }
-
-    // Save to generation_assets
     const variantNum = await getNextVariantNumber(context.generationId);
     const { data: asset, error: saveError } = await db
       .from("generation_assets")
@@ -175,16 +208,21 @@ export const generateVoiceoverTool: ToolHandler = async (
         generation_id: context.generationId,
         org_id: context.orgId,
         type: "audio",
-        metadata: {
-          text,
-          voice_style: voiceStyle || "male_professional",
-          language,
-          format,
-          provider: isArabic ? "gemini" : "elevenlabs",
-          size_bytes: audioBuffer.byteLength,
-        },
-        storage_path: audioUrl,
         public_url: audioUrl,
+        storage_path: audioUrl,
+        metadata: {
+          asset_kind: "voiceover",
+          role: "voiceover",
+          text,
+          voice_id: voiceId,
+          voice_source: voiceSource,
+          voice_style: voiceStyle || null,
+          language,
+          provider: "runway/elevenlabs",
+          duration_seconds: durationEstimate,
+          runway_task_id: task.taskId,
+          source_url: rawUrl,
+        },
         variant_number: variantNum,
       })
       .select("id")
@@ -192,7 +230,7 @@ export const generateVoiceoverTool: ToolHandler = async (
 
     if (saveError) {
       console.warn(
-        "[tool:generate_voiceover] Failed to save asset:",
+        "[tool:generate_voiceover] DB insert warning:",
         saveError.message
       );
     }
@@ -201,19 +239,15 @@ export const generateVoiceoverTool: ToolHandler = async (
       tool: "generate_voiceover",
       generationId: context.generationId,
       status: "complete",
-      message: "Voiceover generated successfully",
+      message: "Voiceover ready",
     });
 
     const summary = [
-      `Voiceover generated successfully`,
+      `Voiceover ready (Runway → ElevenLabs).`,
       `Audio URL: ${audioUrl}`,
+      `Voice: ${voiceSource} · ${voiceId}`,
       `Language: ${language}`,
-      `Provider: ${isArabic ? "Gemini 2.5 Pro TTS" : "ElevenLabs"}`,
-      `Voice: ${voiceStyle || "male_professional"}`,
-      `Format: ${format}`,
-      `Text length: ${text.length} characters`,
-      `Estimated duration: ~${durationEstimate}s`,
-      `Audio size: ${(audioBuffer.byteLength / 1024).toFixed(1)} KB`,
+      `Estimated duration: ~${durationEstimate}s (${wordCount} words)`,
       `Credits used: ${TOOL_CREDIT_COSTS.generate_voiceover}`,
     ].join("\n");
 
@@ -222,10 +256,10 @@ export const generateVoiceoverTool: ToolHandler = async (
       content: summary,
       data: {
         language,
-        voiceStyle,
-        format,
-        provider: isArabic ? "gemini" : "elevenlabs",
-        sizeBytes: audioBuffer.byteLength,
+        voiceId,
+        voiceSource,
+        provider: "runway/elevenlabs",
+        durationSeconds: durationEstimate,
       },
       assets: [
         {
@@ -233,20 +267,21 @@ export const generateVoiceoverTool: ToolHandler = async (
           type: "audio",
           url: audioUrl,
           metadata: {
+            asset_kind: "voiceover",
             text,
-            voice_style: voiceStyle || "male_professional",
+            voice_id: voiceId,
+            voice_source: voiceSource,
             language,
-            format,
-            size_bytes: audioBuffer.byteLength,
+            duration_seconds: durationEstimate,
           },
         },
       ],
     };
-  } catch (error) {
-    console.error("[tool:generate_voiceover] Error:", error);
+  } catch (err) {
+    console.error("[tool:generate_voiceover] Runway TTS failed:", err);
     return {
       success: false,
-      content: `Voiceover generation failed: ${error instanceof Error ? error.message : String(error)}`,
+      content: `Voiceover generation failed: ${err instanceof Error ? err.message : String(err)}. The Runway TTS endpoint may be rate-limited or the voice_id "${voiceId}" rejected — retry, or pass a different voice_id.`,
     };
   }
 };

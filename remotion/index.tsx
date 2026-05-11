@@ -8,7 +8,15 @@ import type { AdCompositionProps, MotionGraphicProps } from "./lib/types";
 const RemotionRoot: React.FC = () => {
   return (
     <>
-      {/* Ad Composition — stitches video/image clips with transitions, text, captions */}
+      {/*
+        Ad Composition — the ONE ad composition. Dimensions are resolved at
+        render time from inputProps.aspectRatio via calculateAdMetadata, so
+        we don't need per-aspect Composition registrations (which caused the
+        silent 9:16 fallback bug when the deployed site was out of sync).
+
+        Declared width/height below are just sane defaults for the Remotion
+        Studio preview — calculateAdMetadata overrides at render time.
+      */}
       <Composition
         id="AdComposition"
         component={AdComposition}
@@ -17,40 +25,9 @@ const RemotionRoot: React.FC = () => {
           clips: [],
           transition: "crossfade" as const,
           fps: 30,
-        } satisfies AdCompositionProps}
-        width={1080}
-        height={1920}
-        fps={30}
-        durationInFrames={150}
-      />
-
-      {/* Ad Composition — 16:9 landscape variant */}
-      <Composition
-        id="AdComposition-Landscape"
-        component={AdComposition}
-        calculateMetadata={calculateAdMetadata}
-        defaultProps={{
-          clips: [],
-          transition: "crossfade" as const,
-          fps: 30,
+          aspectRatio: "16:9" as const,
         } satisfies AdCompositionProps}
         width={1920}
-        height={1080}
-        fps={30}
-        durationInFrames={150}
-      />
-
-      {/* Ad Composition — 1:1 square variant */}
-      <Composition
-        id="AdComposition-Square"
-        component={AdComposition}
-        calculateMetadata={calculateAdMetadata}
-        defaultProps={{
-          clips: [],
-          transition: "crossfade" as const,
-          fps: 30,
-        } satisfies AdCompositionProps}
-        width={1080}
         height={1080}
         fps={30}
         durationInFrames={150}

@@ -42,15 +42,30 @@ export type BrandWatermark = {
 
 export type TransitionType = "cut" | "crossfade" | "fade_to_black";
 
+export type LetterboxMode = "none" | "2.39:1";
+
+export type AspectRatioId = "16:9" | "9:16" | "1:1" | "21:9" | "4:3" | "3:4";
+
 export type AdCompositionProps = {
   clips: ClipInput[];
   audio?: {
     url: string;
     volume: number;
     startFrame?: number;
-    durationFrames?: number; // Actual VO duration — used to prevent black screen at end
+    durationFrames?: number;
   };
   backgroundMusic?: {
+    url: string;
+    volume: number;
+  };
+  /**
+   * Ambient sound bed — the room-tone / location-texture layer that plays
+   * under the whole film at ~0.18 volume (below music 0.15… wait, ambient is
+   * QUIETER than music because it's texture, not melody). Generated via
+   * Runway's eleven_text_to_sound_v2 with the director's soundDesignNote
+   * folded in. Optional — many films are intentionally bone-dry.
+   */
+  ambientSound?: {
     url: string;
     volume: number;
   };
@@ -59,7 +74,15 @@ export type AdCompositionProps = {
   brandWatermark?: BrandWatermark;
   transition: TransitionType;
   filmGrain?: boolean;
+  letterbox?: LetterboxMode;
   fps: number;
+  /**
+   * Output aspect ratio. Drives width/height via calculateMetadata so a
+   * single deployed Remotion site can render every aspect without needing
+   * per-aspect Composition IDs (which require re-deploying the S3 site
+   * every time we add one — the silent-fallback-to-9:16 bug).
+   */
+  aspectRatio?: AspectRatioId;
 };
 
 // Motion graphic types

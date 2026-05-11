@@ -2,109 +2,99 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Sparkles,
-  CalendarDays,
-  BarChart3,
-  SmilePlus,
-  Pencil,
-  Plug,
-  Rocket,
-  LayoutGrid,
-  Home,
-  Settings,
-  FolderOpen,
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { label: "Home", href: "/dashboard", icon: Home, exact: true },
-  { label: "Chat", href: "/dashboard/generate", icon: Sparkles },
-  { label: "Director", href: "/dashboard/campaigns", icon: Rocket },
-  { label: "Gallery", href: "/dashboard/generations", icon: LayoutGrid },
-  { label: "Calendar", href: "/dashboard/calendar", icon: CalendarDays },
-  { label: "Compete", href: "/dashboard/competitors", icon: BarChart3 },
-  { label: "Assets", href: "/dashboard/assets", icon: FolderOpen },
-  { label: "Avatars", href: "/dashboard/characters", icon: SmilePlus },
-  { label: "Brands", href: "/dashboard/brands", icon: Pencil },
+  { label: "Director", href: "/dashboard/director" },
+  { label: "Gallery", href: "/dashboard/generations" },
+  { label: "Assets", href: "/dashboard/assets" },
+  { label: "Scene Builder", href: "/dashboard/scene-builder" },
 ];
 
-const BOTTOM_ITEMS = [
-  { label: "Integrate", href: "/dashboard/integrations", icon: Plug },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings },
-];
+const BOTTOM_ITEMS = [{ label: "Settings", href: "/dashboard/settings" }];
 
 export function Sidebar() {
   const pathname = usePathname();
 
-  function isActive(href: string, exact?: boolean) {
-    if (exact) return pathname === href;
+  function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
   }
 
   return (
-    <aside className="flex h-full w-[72px] flex-col items-center border-r border-[#F0F0F0] bg-white py-4">
-      {/* Logo */}
-      <Link href="/dashboard" className="mb-5 flex items-center justify-center">
-        <img src="/logo.svg" alt="TwinLink" className="h-8 w-8" />
+    <aside className="flex h-full w-[220px] flex-col border-r border-neutral-200 bg-white">
+      {/* Wordmark */}
+      <Link
+        href="/dashboard"
+        className="flex h-16 items-center border-b border-neutral-200 px-6"
+      >
+        <span className="font-serif text-[20px] tracking-tight text-neutral-900">TwinLink</span>
+        <span className="ml-1.5 text-[12px] uppercase tracking-[0.18em] text-neutral-400">
+          director
+        </span>
       </Link>
 
       {/* Main nav */}
-      <nav className="flex flex-1 flex-col items-center gap-1.5">
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item.href, item.exact);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "group relative flex h-12 w-12 flex-col items-center justify-center rounded-xl transition-all duration-150",
-                active
-                  ? "bg-[#4D5D4B] text-white"
-                  : "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#1A1A1A]"
-              )}
-              title={item.label}
-            >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
-              <span className={cn(
-                "mt-1 text-[10px] font-semibold leading-none",
-                active ? "text-white" : "text-[#6B7280] group-hover:text-[#1A1A1A]"
-              )}>
-                {item.label}
-              </span>
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-3 py-5">
+        <ul className="space-y-0.5">
+          {NAV_ITEMS.map((item) => {
+            const active = isActive(item.href);
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "group flex items-center gap-3 rounded-sm px-3 py-2 text-[13px] transition-colors",
+                    active
+                      ? "bg-neutral-900 text-white"
+                      : "text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1 w-1 rounded-full transition-colors",
+                      active ? "bg-white" : "bg-neutral-400 group-hover:bg-neutral-700"
+                    )}
+                  />
+                  <span className="font-mono text-[12px] uppercase tracking-[0.16em]">
+                    {item.label}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
 
-      {/* Bottom items */}
-      <div className="flex flex-col items-center gap-1.5 mb-2">
-        {BOTTOM_ITEMS.map((item) => {
-          const active = isActive(item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex h-12 w-12 flex-col items-center justify-center rounded-xl transition-all duration-150",
-                active
-                  ? "bg-[#4D5D4B] text-white"
-                  : "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#1A1A1A]"
-              )}
-              title={item.label}
-            >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
-              <span className={cn(
-                "mt-1 text-[10px] font-semibold leading-none",
-                active ? "text-white" : "text-[#6B7280]"
-              )}>
-                {item.label}
-              </span>
-            </Link>
-          );
-        })}
+      {/* Bottom */}
+      <div className="border-t border-neutral-200 px-3 py-3">
+        <ul className="space-y-0.5">
+          {BOTTOM_ITEMS.map((item) => {
+            const active = isActive(item.href);
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-sm px-3 py-2 text-[13px]",
+                    active
+                      ? "bg-neutral-900 text-white"
+                      : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "h-1 w-1 rounded-full",
+                      active ? "bg-white" : "bg-neutral-400"
+                    )}
+                  />
+                  <span className="font-mono text-[12px] uppercase tracking-[0.16em]">
+                    {item.label}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </aside>
   );

@@ -33,7 +33,7 @@ Products: ${productLines}
 ${brandContext}
 
 User Request: ${userPrompt || "Create compelling static ads for this brand"}
-Target Language: ${language === "ar" ? "Arabic" : "English"}
+Target Language: ${language || "English"}
 
 Generate ${numConcepts} distinct creative concepts, each with ${perConcept} copy/layout variation${perConcept > 1 ? "s" : ""} (${numVariants} total).
 
@@ -101,9 +101,9 @@ Return a JSON object:
     {
       "variant_number": 1,
       "concept": "Concept name (e.g., 'Editorial Minimalism', 'Lifestyle Aspiration', 'Product Hero')",
-      "headline": "Ad headline text${language === "ar" ? " (in Arabic)" : ""}",
-      "body": "Ad body/description text${language === "ar" ? " (in Arabic)" : ""}",
-      "cta": "Call-to-action text${language === "ar" ? " (in Arabic)" : ""}",
+      "headline": "Ad headline text",
+      "body": "Ad body/description text",
+      "cta": "Call-to-action text",
       "visual_direction": "Detailed art direction — layout grid, visual hierarchy, mood board reference, color blocking strategy",
       "image_prompt": "60-100 words of natural prose describing a COMPLETE AD DESIGN. Structure: Subject/product first, then setting, camera, lighting, composition. Wrap ALL rendered text in double quotes. Use brand font ${brand.font_family || "Helvetica Neue"}. Include brand hex colors, natural imperfections (grain, vignetting), photography style reference. End with: NOT stock photography, NOT CGI, NOT oversaturated.",
       "reference_image_urls": ["Any product/character image URLs to pass for consistency — from brand products or previously generated characters"],
@@ -113,7 +113,7 @@ Return a JSON object:
   ]
 }
 
-Make each variant visually distinct — vary the layout structure, color blocking, typography style, and design aesthetic across concepts. Use the brand's hex colors as primary background/accent colors. The headline and CTA text in the image_prompt MUST match the headline and cta fields for that variant. ${language === "ar" ? "All copy must be in Arabic. Text in image prompts must also be in Arabic." : ""} Return ONLY the JSON.`;
+Make each variant visually distinct — vary the layout structure, color blocking, typography style, and design aesthetic across concepts. Use the brand's hex colors as primary background/accent colors. The headline and CTA text in the image_prompt MUST match the headline and cta fields for that variant. All copy in the target language. Return ONLY the JSON.`;
 }
 
 export function refineCreativeBriefPrompt(
@@ -127,7 +127,7 @@ Original Creative Brief:
 ${JSON.stringify(originalBrief, null, 2)}
 
 User Feedback: ${userFeedback}
-Language: ${language === "ar" ? "Arabic" : "English"}
+Language: ${language || "English"}
 
 Generate an updated creative brief incorporating the user's feedback. Keep the same JSON structure. Only modify the variants affected by the feedback. Return ONLY the JSON.`;
 }

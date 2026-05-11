@@ -4,8 +4,10 @@ import { SSEEmitter } from "@/lib/ai/sse-emitter";
 import { runAgentLoop } from "@/lib/ai/agent-loop";
 import { generateText } from "@/lib/ai/claude";
 import { formatCostBreakdown, clearGenerationCosts } from "@/lib/generation/cost-tracker";
+import { getPersonaById } from "@/lib/directors";
 import type { AgentContext } from "@/lib/ai/tools/types";
 import type { Brand } from "@/lib/database.types";
+import type { DirectorPersona } from "@/lib/directors/types";
 
 export async function POST(request: Request) {
   // 1. Auth check
@@ -23,6 +25,10 @@ export async function POST(request: Request) {
     prompt: string;
     budget?: string;
     generationId?: string;
+    durationSeconds?: number;
+    aspectRatio?: string;
+    leadDirectorId?: string;
+    coDirectorId?: string;
     conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   };
   try {
@@ -32,7 +38,9 @@ export async function POST(request: Request) {
   }
 
   const { brandId, prompt } = body;
-  let conversationHistory = body.conversationHistory as Array<{ role: "user" | "assistant"; content: string }> | undefined;
+  const conversationHistory = body.conversationHistory as
+    | Array<{ role: "user" | "assistant"; content: string }>
+    | undefined;
 
   // Language detection: if "auto" or not specified, detect from prompt
   let language = (body.language as string) || auth.preferredLanguage || "auto";
@@ -44,7 +52,7 @@ export async function POST(request: Request) {
     return new Response("Missing or empty prompt", { status: 400 });
   }
 
-  // 3. Load brand(s) — specific brand if ID provided, otherwise ALL user brands
+  // 3. Load brand(s)
   let brand: Brand | null = null;
   let allBrands: Brand[] = [];
   if (brandId) {
@@ -56,14 +64,12 @@ export async function POST(request: Request) {
       .single();
     brand = data;
   } else {
-    // No brand selected — load ALL brands so the agent can pick the right one
     const { data } = await db
       .from("brands")
       .select("*")
       .eq("org_id", auth.orgId)
       .order("is_default", { ascending: false });
     allBrands = data || [];
-    // If only one brand, auto-select it
     if (allBrands.length === 1) {
       brand = allBrands[0];
     }
@@ -82,15 +88,18 @@ export async function POST(request: Request) {
     generationType = "campaign";
   }
 
-  // Reuse existing generation for follow-ups, or create a new one
+  // Reuse existing generation for follow-ups, or create a new one.
+  // Director IDs are persisted in generations.metadata at create time and
+  // re-read on follow-ups so resumed sessions stay director-aware.
   let generationId: string;
+  let leadDirectorId: string | undefined;
+  let coDirectorId: string | undefined;
   const isFollowUp = !!body.generationId;
 
   if (body.generationId) {
-    // Follow-up: verify the generation belongs to this user/org
     const { data: existing } = await db
       .from("generations")
-      .select("id")
+      .select("id, agent_config")
       .eq("id", body.generationId)
       .eq("org_id", auth.orgId)
       .single();
@@ -100,32 +109,27 @@ export async function POST(request: Request) {
     }
     generationId = existing.id;
 
-    // Mark it as processing again
+    // AUTEUR project state (cast, lesson_plan, whiteboard_images) lives in
+    // generations.agent_config — the only jsonb column on generations. The
+    // metadata column doesn't exist on this table.
+    const cfg = (existing.agent_config as Record<string, unknown> | null) || {};
+    leadDirectorId = (cfg.lead_director_id as string | undefined) || body.leadDirectorId;
+    coDirectorId = (cfg.co_director_id as string | undefined) || body.coDirectorId;
+
     await db.from("generations").update({ status: "processing" }).eq("id", generationId);
-
-    // Load existing assets so agent can reference them in follow-ups
-    const { data: existingAssets } = await db
-      .from("generation_assets")
-      .select("type, public_url, metadata")
-      .eq("generation_id", generationId)
-      .order("created_at", { ascending: true });
-
-    if (existingAssets && existingAssets.length > 0) {
-      const assetSummary = existingAssets.map((a) => {
-        const meta = a.metadata as Record<string, unknown> | null;
-        const label = meta?.asset_category || meta?.title || a.type;
-        return `- [${label}] ${a.type}: ${a.public_url}`;
-      }).join("\n");
-
-      // Inject asset context into conversation history so agent knows what was already generated
-      const assetContext = `[SYSTEM: Previously generated assets for this session — use these URLs, do NOT regenerate]\n${assetSummary}`;
-      if (!conversationHistory) conversationHistory = [];
-      conversationHistory.push(
-        { role: "user" as const, content: assetContext },
-        { role: "assistant" as const, content: "Understood. I have access to all previously generated assets and will reuse them." }
-      );
-    }
   } else {
+    leadDirectorId = body.leadDirectorId;
+    coDirectorId = body.coDirectorId;
+
+    const initialAgentConfig: Record<string, unknown> = {
+      lead_director_id: leadDirectorId || null,
+      co_director_id: coDirectorId || null,
+      lesson_plan: [],
+      whiteboard_images: [],
+      aspect_ratio: body.aspectRatio || null,
+      duration_seconds: body.durationSeconds || null,
+    };
+
     const { data: generation, error: genError } = await db
       .from("generations")
       .insert({
@@ -137,6 +141,7 @@ export async function POST(request: Request) {
         language,
         prompt,
         started_at: new Date().toISOString(),
+        agent_config: initialAgentConfig,
       })
       .select("id")
       .single();
@@ -148,11 +153,25 @@ export async function POST(request: Request) {
     generationId = generation.id;
   }
 
+  // Load director personas (server-side; they're not exposed to client raw).
+  const leadDirector: DirectorPersona | null = leadDirectorId
+    ? getPersonaById(leadDirectorId) || null
+    : null;
+  const coDirector: DirectorPersona | null = coDirectorId
+    ? getPersonaById(coDirectorId) || null
+    : null;
+
+  if (leadDirectorId && !leadDirector) {
+    console.warn(`[agent/run] Unknown lead director "${leadDirectorId}" — running without persona`);
+  }
+  if (coDirectorId && !coDirector) {
+    console.warn(`[agent/run] Unknown co director "${coDirectorId}" — running without persona`);
+  }
+
   // 5. Find existing session for this generation (follow-ups) or create new one
   let session: { id: string };
 
   if (isFollowUp) {
-    // Reuse the existing session for this generation
     const { data: existingSession } = await db
       .from("agent_sessions")
       .select("id")
@@ -166,7 +185,6 @@ export async function POST(request: Request) {
       session = existingSession;
       await db.from("agent_sessions").update({ status: "active", updated_at: new Date().toISOString() }).eq("id", session.id);
     } else {
-      // Fallback: create new session
       const { data: newSession, error: sessionError } = await db
         .from("agent_sessions")
         .insert({ generation_id: generationId, org_id: auth.orgId, user_id: auth.id, total_steps: 0, status: "active" })
@@ -197,6 +215,16 @@ export async function POST(request: Request) {
 
   // 7. Build AgentContext
   const budget = body.budget ? parseInt(body.budget) : undefined;
+  const ALLOWED_ASPECTS = new Set(["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]);
+  const aspectRatio =
+    body.aspectRatio && ALLOWED_ASPECTS.has(body.aspectRatio) ? body.aspectRatio : undefined;
+  const durationSeconds =
+    typeof body.durationSeconds === "number" &&
+    body.durationSeconds >= 5 &&
+    body.durationSeconds <= 180
+      ? Math.round(body.durationSeconds)
+      : undefined;
+
   const context: AgentContext = {
     generationId,
     orgId: auth.orgId,
@@ -204,24 +232,41 @@ export async function POST(request: Request) {
     brand,
     allBrands: !brand && allBrands.length > 1 ? allBrands : undefined,
     language,
+    durationSeconds,
+    aspectRatio,
     budget,
     creditsUsed: 0,
+    leadDirector,
+    coDirector,
   };
 
-  // Emit initial metadata
   emitter.send("session_start", {
     generationId,
     sessionId: session.id,
     brandName: brand?.name || null,
     language,
+    durationSeconds,
+    aspectRatio,
+    leadDirectorId: leadDirector?.id || null,
+    coDirectorId: coDirector?.id || null,
   });
+
+  const loopAbort = new AbortController();
+  request.signal.addEventListener(
+    "abort",
+    () => {
+      console.log(`[agent/run] client disconnected — aborting agent loop for ${generationId}`);
+      loopAbort.abort(new Error("client-aborted"));
+    },
+    { once: true }
+  );
+  context.signal = loopAbort.signal;
 
   // 8. Run agent loop in background
   (async () => {
     try {
       await runAgentLoop(context, prompt, emitter, session.id, conversationHistory);
 
-      // Generate a smart title ONLY for the first message — never overwrite on follow-ups
       if (!isFollowUp) {
         let title = prompt.slice(0, 60);
         try {
@@ -229,7 +274,8 @@ export async function POST(request: Request) {
             model: "claude-sonnet-4-6",
             maxTokens: 50,
             temperature: 0.3,
-            system: "Generate a concise creative title (3-8 words) for this ad/content request. The title should describe WHAT is being created (e.g. '826 Models Product Hero', 'Peugeot 408 UGC Testimonial', 'Nike Brand Research'). Return ONLY the title text, nothing else. No quotes, no markdown, no explanation.",
+            system:
+              "Generate a concise, evocative film title (2-6 words). The title should suggest the film's tone or central image, not summarize the brief. Return ONLY the title text, nothing else. No quotes, no markdown.",
             messages: [{ role: "user", content: prompt }],
           });
           title = titleText.trim().replace(/[*#"]/g, "").slice(0, 80);
@@ -246,7 +292,6 @@ export async function POST(request: Request) {
           })
           .eq("id", generationId);
       } else {
-        // Follow-up: just mark completed, keep existing title
         await db
           .from("generations")
           .update({
@@ -256,7 +301,6 @@ export async function POST(request: Request) {
           .eq("id", generationId);
       }
 
-      // Mark session completed
       await db
         .from("agent_sessions")
         .update({
@@ -265,19 +309,16 @@ export async function POST(request: Request) {
         })
         .eq("id", session.id);
 
-      // Log cost breakdown
       const costBreakdown = formatCostBreakdown(generationId);
       console.log(`[agent/run] Cost breakdown for ${generationId}:\n${costBreakdown}`);
       clearGenerationCosts(generationId);
 
-      // Emit completion
       emitter.send("complete", { generationId });
     } catch (error) {
       const errMsg =
         error instanceof Error ? error.message : "Agent execution failed";
       console.error("[agent/run] Fatal error:", errMsg);
 
-      // Mark generation failed
       try {
         await db
           .from("generations")
@@ -305,7 +346,6 @@ export async function POST(request: Request) {
     }
   })();
 
-  // 9. Return SSE response
   return new Response(emitter.stream, {
     headers: {
       "Content-Type": "text/event-stream",
@@ -316,33 +356,13 @@ export async function POST(request: Request) {
   });
 }
 
-/**
- * Detect language from user prompt using simple heuristics.
- * Checks for Arabic script, French patterns, and explicit language mentions.
- */
 function detectLanguageFromPrompt(prompt: string): string {
   const lower = prompt.toLowerCase();
 
-  // Explicit language requests
-  if (lower.includes("darija") || lower.includes("دارجة") || lower.includes("moroccan arabic")) return "ar-MA";
-  if (lower.includes("egyptian") || lower.includes("مصري")) return "ar-EG";
-  if (lower.includes("gulf arabic") || lower.includes("khaleeji") || lower.includes("خليجي")) return "ar-SA";
-  if (lower.includes("in arabic") || lower.includes("بالعربية") || lower.includes("arabic")) return "ar";
   if (lower.includes("en français") || lower.includes("in french") || lower.includes("en francais")) return "fr";
   if (lower.includes("in spanish") || lower.includes("en español")) return "es";
-
-  // Detect Arabic script (Unicode range \u0600-\u06FF)
-  const arabicChars = (prompt.match(/[\u0600-\u06FF]/g) || []).length;
-  const totalChars = prompt.replace(/\s/g, "").length;
-  if (totalChars > 0 && arabicChars / totalChars > 0.3) {
-    // Predominantly Arabic script — default to Moroccan Darija for MENA focus
-    return "ar-MA";
-  }
-
-  // Detect French
-  const frenchWords = ["créer", "publicité", "vidéo", "marque", "produit", "pour", "avec", "une", "des"];
-  const frenchCount = frenchWords.filter(w => lower.includes(w)).length;
-  if (frenchCount >= 3) return "fr";
+  if (lower.includes("in german") || lower.includes("auf deutsch")) return "de";
+  if (lower.includes("in japanese") || lower.includes("日本語")) return "ja";
 
   return "en";
 }

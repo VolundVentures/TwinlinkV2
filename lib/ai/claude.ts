@@ -119,6 +119,7 @@ export async function generateStructuredJSON<T>(options: {
   messages: ClaudeMessage[];
   schema: Record<string, unknown>;
   schemaName?: string;
+  signal?: AbortSignal;
 }): Promise<T> {
   const {
     model = "claude-opus-4-6",
@@ -128,6 +129,7 @@ export async function generateStructuredJSON<T>(options: {
     messages,
     schema,
     schemaName,
+    signal,
   } = options;
 
   const toolName = schemaName || "output";
@@ -147,24 +149,40 @@ export async function generateStructuredJSON<T>(options: {
     messages.length
   );
 
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY!,
-      "anthropic-version": "2023-06-01",
-      "anthropic-beta": "interleaved-thinking-2025-05-14",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      temperature,
-      ...(system && { system }),
-      messages,
-      tools: [tool],
-      tool_choice: { type: "tool", name: toolName },
-    }),
-  });
+  // Inner abort: we want to fail fast on socket hangs (ECONNRESET) so we can
+  // retry instead of sitting on a dead connection. 9 minutes is generous for
+  // Opus + interleaved thinking on a ~16k-token structured output.
+  const innerController = new AbortController();
+  const innerTimer = setTimeout(() => innerController.abort(new Error("inner-timeout")), 9 * 60_000);
+  if (signal) {
+    if (signal.aborted) innerController.abort(signal.reason);
+    else signal.addEventListener("abort", () => innerController.abort(signal.reason), { once: true });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      signal: innerController.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY!,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "interleaved-thinking-2025-05-14",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        ...(system && { system }),
+        messages,
+        tools: [tool],
+        tool_choice: { type: "tool", name: toolName },
+      }),
+    });
+  } finally {
+    clearTimeout(innerTimer);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -277,11 +295,13 @@ export function createSSEStream() {
 // Stream with Tool Use (for autonomous agent)
 // ============================================
 
+type SystemBlock = { type: "text"; text: string; cache_control?: { type: "ephemeral" } };
+
 export async function* streamWithTools(options: {
   model?: string;
   maxTokens?: number;
   temperature?: number;
-  system?: string;
+  system?: string | SystemBlock[];
   messages: AnthropicMessage[];
   tools: ToolDefinitionInput[];
   thinking?: boolean;
@@ -301,12 +321,27 @@ export async function* streamWithTools(options: {
 
   console.log("[claude] streamWithTools model:", model, "messages:", messages.length, "tools:", tools.length, "thinking:", useThinking);
 
+  // Prompt caching: cache_control on the last tool definition caches the
+  // entire tool list. System blocks may also carry cache_control. Static
+  // prefixes survive 5 min across agent turns, cutting input-token cost ~90%
+  // on cache hits.
+  const cachedTools =
+    tools.length > 0
+      ? [
+          ...tools.slice(0, -1),
+          {
+            ...tools[tools.length - 1],
+            cache_control: { type: "ephemeral" as const },
+          },
+        ]
+      : tools;
+
   const body: Record<string, unknown> = {
     model,
     max_tokens: maxTokens,
     stream: true,
     messages,
-    tools,
+    tools: cachedTools,
   };
 
   if (system) body.system = system;

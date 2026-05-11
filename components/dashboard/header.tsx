@@ -10,8 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useTranslation } from "@/lib/i18n/use-translations";
-import { LogOut, Settings, User, Gem } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import { MobileMenuButton } from "./mobile-nav";
 
 type HeaderProps = {
@@ -20,7 +19,6 @@ type HeaderProps = {
 };
 
 export function Header({ userName, credits = 0 }: HeaderProps) {
-  const { t } = useTranslation();
   const router = useRouter();
   const supabase = createClient();
 
@@ -35,30 +33,29 @@ export function Header({ userName, credits = 0 }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-[#F0F0F0] bg-white px-4 md:px-6">
-      {/* Left — hamburger + brand */}
-      <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-5 md:px-6">
+      <div className="flex items-center gap-3">
         <MobileMenuButton />
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <img src="/logo.svg" alt="TwinLink" className="h-7 w-7 md:hidden" />
-          <span className="text-[16px] font-bold text-[#1A1A1A] hidden md:inline">TwinLink</span>
+        <Link href="/dashboard" className="flex items-center md:hidden">
+          <span className="font-serif text-[18px] text-neutral-900">TwinLink</span>
         </Link>
       </div>
 
-      {/* Right — credits + upgrade + avatar */}
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="flex items-center gap-4">
         {/* Credits */}
-        <div className="flex items-center gap-1.5 rounded-full border border-[#E5E7EB] px-2.5 py-1.5 md:px-3">
-          <Gem className="h-3.5 w-3.5 text-[#4D5D4B]" />
-          <span className="text-[12px] md:text-[13px] font-bold text-[#1A1A1A] tabular-nums">
+        <div className="flex items-baseline gap-1.5">
+          <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-neutral-500">
+            credits
+          </span>
+          <span className="font-serif text-[15px] text-neutral-900 tabular-nums">
             {credits.toLocaleString()}
           </span>
         </div>
 
-        {/* Upgrade — hidden on very small screens */}
+        {/* Upgrade */}
         <Link
-          href="/dashboard/billing"
-          className="hidden sm:flex items-center rounded-full bg-[#4D5D4B] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#3d4a3b] transition-colors"
+          href="/dashboard/settings"
+          className="hidden sm:inline-flex h-8 items-center rounded-none border border-neutral-900 bg-neutral-900 px-4 text-[12px] uppercase tracking-[0.18em] text-white transition-colors hover:bg-neutral-800"
         >
           Upgrade
         </Link>
@@ -66,39 +63,36 @@ export function Header({ userName, credits = 0 }: HeaderProps) {
         {/* User menu */}
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center outline-none">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A1A1A] text-[11px] font-bold text-white select-none hover:bg-[#333] transition-colors">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-semibold text-white select-none hover:bg-neutral-800 transition-colors">
               {initials}
             </div>
           </DropdownMenuTrigger>
 
-          <DropdownMenuContent align="end" className="w-48 bg-white shadow-elevated rounded-xl border border-[#F0F0F0]">
-            {/* User info — non-interactive label */}
+          <DropdownMenuContent
+            align="end"
+            className="w-48 rounded-none border border-neutral-200 bg-white shadow-sm"
+          >
             <div className="px-3 py-2">
-              <p className="text-[13px] font-semibold text-[#1A1A1A]">{userName || "Account"}</p>
-              <p className="text-[11px] text-[#9CA3AF]">Free plan</p>
+              <p className="font-serif text-[13px] text-neutral-900">{userName || "Account"}</p>
+              <p className="font-mono text-[12px] uppercase tracking-[0.18em] text-neutral-500">
+                Free plan
+              </p>
             </div>
-            <DropdownMenuSeparator className="bg-[#F0F0F0]" />
+            <DropdownMenuSeparator className="bg-neutral-200" />
             <DropdownMenuItem
               onClick={() => router.push("/dashboard/settings")}
-              className="text-[#6B7280] focus:bg-[#F3F4F6] focus:text-[#1A1A1A] rounded-lg"
+              className="rounded-none text-neutral-700 focus:bg-neutral-100 focus:text-neutral-900"
             >
               <Settings className="me-2 h-4 w-4" />
-              {t.nav.settings}
+              <span className="font-mono text-[12px] uppercase tracking-[0.16em]">Settings</span>
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => router.push("/dashboard/brands")}
-              className="text-[#6B7280] focus:bg-[#F3F4F6] focus:text-[#1A1A1A] rounded-lg"
-            >
-              <User className="me-2 h-4 w-4" />
-              My Brands
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-[#F0F0F0]" />
+            <DropdownMenuSeparator className="bg-neutral-200" />
             <DropdownMenuItem
               onClick={handleLogout}
-              className="text-[#6B7280] focus:bg-[#F3F4F6] focus:text-[#1A1A1A] rounded-lg"
+              className="rounded-none text-neutral-700 focus:bg-neutral-100 focus:text-neutral-900"
             >
               <LogOut className="me-2 h-4 w-4" />
-              {t.auth.logout}
+              <span className="font-mono text-[12px] uppercase tracking-[0.16em]">Log out</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

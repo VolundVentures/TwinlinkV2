@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useTranslation } from "@/lib/i18n/use-translations";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
@@ -170,7 +169,6 @@ function getTypeBadgeStyle(label: string): React.CSSProperties {
    ------------------------------------------------ */
 
 export default function GenerationDetailPage() {
-  const { t } = useTranslation();
   const params = useParams();
   const router = useRouter();
   const generationId = params.generationId as string;
@@ -284,7 +282,7 @@ export default function GenerationDetailPage() {
           onClick={() => router.push("/dashboard/generations")}
         >
           <ArrowLeft className="size-4" />
-          {t.common.back}
+          Back
         </button>
       </div>
     );
@@ -302,14 +300,22 @@ export default function GenerationDetailPage() {
   return (
     <div className="min-h-screen bg-white animate-fade-in-up">
       <div className="mx-auto max-w-7xl px-8 py-6">
-        {/* ====== Back link ====== */}
-        <button
-          onClick={() => router.push("/dashboard/generations")}
-          className="mb-8 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#6B7280] transition-colors hover:text-[#1A1A1A]"
-        >
-          <ArrowLeft className="size-4" />
-          Back to Generations
-        </button>
+        {/* ====== Back link + Scene Builder ====== */}
+        <div className="mb-8 flex items-center justify-between">
+          <button
+            onClick={() => router.push("/dashboard/generations")}
+            className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-[#6B7280] transition-colors hover:text-[#1A1A1A]"
+          >
+            <ArrowLeft className="size-4" />
+            Back to Generations
+          </button>
+          <button
+            onClick={() => router.push(`/dashboard/scene-builder/${generationId}`)}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-neutral-200 bg-white px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-neutral-700 transition-colors hover:bg-neutral-50 hover:text-neutral-900"
+          >
+            open in scene builder →
+          </button>
+        </div>
 
         {assets.length === 0 ? (
           /* ====== Empty state ====== */
@@ -347,30 +353,43 @@ export default function GenerationDetailPage() {
                       />
                     )}
 
-                    {/* ---- Video ---- */}
-                    {selectedAsset.type === "video" && (
-                      <div className="relative w-full bg-[#0A0A0A] rounded-2xl overflow-hidden">
-                        <video
-                          key={selectedAsset.id}
-                          src={selectedAsset.public_url}
-                          controls
-                          playsInline
-                          className="w-full object-contain"
-                          style={{ maxHeight: "calc(100vh - 14rem)" }}
-                        />
-                        {/* HD PREVIEW badge */}
-                        <span
-                          className={cn(
-                            "absolute bottom-3 start-3",
-                            "inline-flex items-center rounded-full px-2.5 py-1",
-                            "text-[10px] font-bold uppercase tracking-wider text-white",
-                            "bg-white/10 backdrop-blur-md"
-                          )}
-                        >
-                          HD PREVIEW
-                        </span>
-                      </div>
-                    )}
+                    {/* ---- Video (respects source aspect ratio) ---- */}
+                    {selectedAsset.type === "video" && (() => {
+                      const ar = selectedAsset.aspect_ratio || "16:9";
+                      const aspectClass =
+                        ar === "9:16"
+                          ? "aspect-[9/16] max-h-[calc(100vh-14rem)] mx-auto"
+                          : ar === "1:1"
+                          ? "aspect-square max-h-[calc(100vh-14rem)] mx-auto"
+                          : ar === "21:9"
+                          ? "aspect-[21/9]"
+                          : ar === "4:3"
+                          ? "aspect-[4/3] max-h-[calc(100vh-14rem)] mx-auto"
+                          : ar === "3:4"
+                          ? "aspect-[3/4] max-h-[calc(100vh-14rem)] mx-auto"
+                          : "aspect-video";
+                      return (
+                        <div className={cn("relative w-full bg-[#0A0A0A] rounded-2xl overflow-hidden", aspectClass)}>
+                          <video
+                            key={selectedAsset.id}
+                            src={selectedAsset.public_url}
+                            controls
+                            playsInline
+                            className="h-full w-full object-contain"
+                          />
+                          <span
+                            className={cn(
+                              "absolute bottom-3 start-3",
+                              "inline-flex items-center rounded-full px-2.5 py-1",
+                              "text-[10px] font-bold uppercase tracking-wider text-white",
+                              "bg-white/10 backdrop-blur-md"
+                            )}
+                          >
+                            HD PREVIEW · {ar}
+                          </span>
+                        </div>
+                      );
+                    })()}
 
                     {/* ---- Audio ---- */}
                     {selectedAsset.type === "audio" && (

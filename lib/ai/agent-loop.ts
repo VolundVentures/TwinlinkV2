@@ -14,10 +14,109 @@ import { SSEEmitter } from "@/lib/ai/sse-emitter";
 import { getCredits } from "@/lib/credits";
 import { db } from "@/lib/db";
 import { buildAgentSystemPrompt } from "@/lib/ai/agent-system-prompt";
+import { buildProjectState, renderProjectStateSection } from "@/lib/ai/project-state";
 import { getToolDefinitions, getToolHandler } from "@/lib/ai/tools/registry";
 
 const MAX_TURNS = 30;
 const MAX_TOOL_CALLS = 60;
+
+/**
+ * Tools that produce user-facing assets. After any of these run, the agent
+ * MUST follow up with request_approval — otherwise the UI has no buttons and
+ * the workflow stalls. If the agent forgets, we inject a reminder message.
+ */
+const ASSET_PRODUCING_TOOLS = new Set([
+  "generate_plate",
+  "edit_plate",
+  "generate_keyframe",
+  "generate_image",
+  "generate_video",
+  "edit_video",
+  "generate_coverage",
+  "apply_signature_pass",
+  "apply_director_note",
+  "compose_video",
+]);
+
+/** Infer which stage a given tool's output belongs to. */
+function stageForTool(name: string): "plates" | "keyframes" | "shots" | "final_cut" | null {
+  if (name === "generate_plate" || name === "edit_plate") return "plates";
+  if (name === "generate_keyframe" || name === "generate_image") return "keyframes";
+  if (
+    name === "generate_video" ||
+    name === "edit_video" ||
+    name === "generate_coverage" ||
+    name === "apply_signature_pass" ||
+    name === "apply_director_note"
+  )
+    return "shots";
+  if (name === "compose_video") return "final_cut";
+  return null;
+}
+
+/**
+ * Walk the conversation history in reverse looking for the most recent
+ * assistant turn that produced assets. If that turn did NOT include a
+ * request_approval call, return the stage that still needs approval.
+ * Otherwise null.
+ */
+function lastAssetStageNeedingApproval(
+  messages: AnthropicMessage[]
+): "plates" | "keyframes" | "shots" | "final_cut" | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant" || typeof m.content === "string") continue;
+    const tools = (m.content as ContentBlock[]).filter(
+      (b): b is ToolUseBlock => b.type === "tool_use"
+    );
+    if (tools.length === 0) continue;
+    const hadAssetTool = tools.some((t) => ASSET_PRODUCING_TOOLS.has(t.name));
+    const hadApproval = tools.some((t) => t.name === "request_approval");
+    if (!hadAssetTool) return null; // most recent asset-producing turn already handled
+    if (hadApproval) return null;
+    // Pick the stage from the first asset-producing tool in this turn
+    for (const t of tools) {
+      const stage = stageForTool(t.name);
+      if (stage) return stage;
+    }
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Flatten the internal Anthropic message array into a compact text form for
+ * persistence. Tool-use blocks become a one-line summary; tool_result blocks
+ * get trimmed. On resume, the agent gets this as conversationHistory — the
+ * current project state is re-read from DB anyway.
+ */
+function serializeMessages(
+  messages: AnthropicMessage[]
+): Array<{ role: "user" | "assistant"; content: string }> {
+  const out: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const m of messages) {
+    if (typeof m.content === "string") {
+      out.push({ role: m.role, content: m.content });
+      continue;
+    }
+    const parts: string[] = [];
+    for (const b of m.content) {
+      if (b.type === "text") parts.push(b.text);
+      else if (b.type === "tool_use") {
+        const input = JSON.stringify(b.input).slice(0, 400);
+        parts.push(`[called ${b.name}(${input})]`);
+      } else if (b.type === "tool_result") {
+        const text = typeof b.content === "string" ? b.content : JSON.stringify(b.content);
+        parts.push(`[result: ${text.slice(0, 400)}]`);
+      }
+      // thinking blocks are dropped — they have signatures tied to a specific
+      // API call and can't be replayed anyway
+    }
+    const joined = parts.join("\n").trim();
+    if (joined) out.push({ role: m.role, content: joined });
+  }
+  return out;
+}
 
 /**
  * Core autonomous agent loop.
@@ -53,11 +152,55 @@ export async function runAgentLoop(
   messages.push({ role: "user", content: userPrompt });
 
   const toolDefs = getToolDefinitions();
-  const systemPrompt = buildAgentSystemPrompt(context.brand, context.language, context.allBrands);
+
+  // Build the persistent project-state manifest from DB so the director
+  // starts every run with full awareness of what's already been generated
+  // (plates, keyframes, shots, final film). Resilient to context compaction
+  // and session resumption.
+  const projectState = await buildProjectState(context.generationId);
+  const projectStateSection = renderProjectStateSection(projectState);
+  if (projectStateSection) {
+    console.log(
+      `[agent-loop] Injecting project state — ${projectState.plates.length} plates, ${projectState.keyframes.length} keyframes, ${projectState.shots.length} shots`
+    );
+  }
+
+  const staticSystemPrompt = buildAgentSystemPrompt(
+    context.brand,
+    context.language,
+    context.allBrands,
+    { durationSeconds: context.durationSeconds, aspectRatio: context.aspectRatio },
+    { lead: context.leadDirector ?? null, co: context.coDirector ?? null }
+  );
+
+  // Split system into a cacheable static prefix + a non-cached dynamic suffix
+  // (project state changes every turn as assets land; caching it would
+  // invalidate the prefix). The static prefix is ~10k tokens — caching saves
+  // ~60% of input-token cost across a multi-turn run.
+  const systemBlocks: Array<{
+    type: "text";
+    text: string;
+    cache_control?: { type: "ephemeral" };
+  }> = [
+    {
+      type: "text",
+      text: staticSystemPrompt,
+      cache_control: { type: "ephemeral" },
+    },
+  ];
+  if (projectStateSection) {
+    systemBlocks.push({ type: "text", text: `\n${projectStateSection}\n` });
+  }
 
   let totalToolCalls = 0;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
+    // Client disconnected / user clicked Stop — bail out immediately so we
+    // stop paying for Claude turns and stop launching new Replicate jobs.
+    if (context.signal?.aborted) {
+      console.log(`[agent-loop] aborted before turn ${turn + 1} — exiting loop`);
+      break;
+    }
     console.log(
       `[agent-loop] Turn ${turn + 1}/${MAX_TURNS}, tool calls so far: ${totalToolCalls}`
     );
@@ -68,7 +211,7 @@ export async function runAgentLoop(
 
     try {
       const result = await collectStreamResponse(
-        systemPrompt,
+        systemBlocks,
         messages,
         toolDefs,
         emitter
@@ -93,8 +236,22 @@ export async function runAgentLoop(
       (b): b is ToolUseBlock => b.type === "tool_use"
     );
 
-    // If no tool calls and stop_reason is "end_turn", the agent is done
+    // If no tool calls and stop_reason is "end_turn", the agent thinks it's done.
+    // BUT: if the previous turn ran asset-producing tools without request_approval,
+    // the UI has no buttons. Nudge the agent to call request_approval instead of
+    // just stopping — this is the gate discipline the user depends on.
     if (toolUseBlocks.length === 0 && stopReason === "end_turn") {
+      const pendingStage = lastAssetStageNeedingApproval(messages);
+      if (pendingStage) {
+        console.warn(
+          `[agent-loop] Agent ended turn without request_approval after producing ${pendingStage} assets — injecting nudge`
+        );
+        messages.push({
+          role: "user",
+          content: `REMINDER: you just produced ${pendingStage} assets but did not call request_approval(stage="${pendingStage}"). The user has no approval button right now. Call request_approval(stage="${pendingStage}", items=[...]) NOW, listing every current ${pendingStage} item. Do not ask me if you should — just do it.`,
+        });
+        continue; // loop once more to let the agent recover
+      }
       console.log("[agent-loop] Agent finished (end_turn, no tool calls)");
       break;
     }
@@ -102,7 +259,12 @@ export async function runAgentLoop(
     // If there are no tool calls but stop_reason isn't end_turn
     // (e.g. max_tokens), also break to avoid infinite loop
     if (toolUseBlocks.length === 0) {
-      console.log(`[agent-loop] No tool calls, stop_reason: ${stopReason}`);
+      console.warn(`[agent-loop] No tool calls, stop_reason: ${stopReason}`);
+      if (stopReason !== "end_turn") {
+        emitter.send("error", {
+          message: `The director stopped unexpectedly (${stopReason}). The treatment may be incomplete. You can reply in the chat to continue, or re-pitch.`,
+        });
+      }
       break;
     }
 
@@ -152,19 +314,46 @@ export async function runAgentLoop(
       content: toolResultBlocks,
     });
 
-    // Persist step progress to DB (best-effort)
+    // Checkpoint break: if the agent called request_approval, stop the loop.
+    // The checkpoint_ready event was already emitted by the tool; the frontend
+    // renders the approval UI. The user's next message resumes the loop via
+    // the accumulated conversationHistory.
+    const hitCheckpoint = toolUseBlocks.some((b) => b.name === "request_approval");
+    if (hitCheckpoint) {
+      console.log("[agent-loop] Checkpoint hit via request_approval — ending turn, awaiting user follow-up");
+      break;
+    }
+
+    // Persist step progress + full message history to DB (best-effort).
+    // Messages live here so a future session can load and resume the chat.
     try {
       await db
         .from("agent_sessions")
         .update({
           current_step: turn + 1,
           status: "active",
+          messages: serializeMessages(messages),
           updated_at: new Date().toISOString(),
         })
         .eq("id", sessionId);
     } catch {
       // Non-critical — don't break the loop
     }
+  }
+
+  // Final flush so the last turn's messages are persisted even when the loop
+  // exits via checkpoint/end_turn/budget/limit.
+  try {
+    await db
+      .from("agent_sessions")
+      .update({
+        messages: serializeMessages(messages),
+        status: "idle",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", sessionId);
+  } catch {
+    // ignore
   }
 
   // If we exhausted all turns without the agent finishing
@@ -190,7 +379,11 @@ type StreamResult = {
  * real-time SSE events to the frontend along the way.
  */
 async function collectStreamResponse(
-  systemPrompt: string,
+  systemBlocks: Array<{
+    type: "text";
+    text: string;
+    cache_control?: { type: "ephemeral" };
+  }>,
   messages: AnthropicMessage[],
   tools: ReturnType<typeof getToolDefinitions>,
   emitter: SSEEmitter
@@ -202,7 +395,17 @@ async function collectStreamResponse(
   let currentText = "";
 
   const stream = streamWithTools({
-    system: systemPrompt,
+    // Sonnet 4.6 runs the director agent loop. We tried Haiku 4.5 for speed
+    // but Haiku jumps ahead in the asset chain — observed firing 3×
+    // generate_video calls in parallel BEFORE any keyframe existed,
+    // then back-filling keyframes a turn later. Sonnet respects the
+    // hard dependency order (plates → keyframes → shots → compose) and
+    // keeps to one stage per turn. Treatment generation stays on Haiku
+    // (it's a single structured-JSON pass with no ordering risk).
+    // Override with AGENT_MODEL=claude-haiku-4-5 to retry Haiku with
+    // a stronger system prompt later.
+    model: process.env.AGENT_MODEL || "claude-sonnet-4-6",
+    system: systemBlocks,
     messages,
     tools,
   });
@@ -218,8 +421,10 @@ async function collectStreamResponse(
       }
 
       case "text_delta": {
+        // Accumulate but DO NOT stream deltas to the client — the UX is cleaner
+        // when only the completed message arrives as a single event, which the
+        // chat pane then renders as a preview with "full version in workspace".
         currentText += event.text;
-        emitter.send("thinking", { text: event.text });
         break;
       }
 
@@ -352,7 +557,8 @@ async function executeToolCall(
     result = await withTimeout(
       (signal) => handler(input, { ...context, signal }, emitter as unknown as SSEEmitterShape),
       timeoutMs,
-      `Tool "${name}" timed out after ${Math.round(timeoutMs / 1000)}s`
+      `Tool "${name}" timed out after ${Math.round(timeoutMs / 1000)}s`,
+      context.signal
     );
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -437,9 +643,16 @@ async function executeToolCall(
 function withTimeout<T>(
   promiseOrFactory: Promise<T> | ((signal: AbortSignal) => Promise<T>),
   ms: number,
-  message: string
+  message: string,
+  parentSignal?: AbortSignal
 ): Promise<T> {
   const controller = new AbortController();
+  // If the parent (loop-level) signal aborts, cascade into the child so
+  // in-flight tool calls stop immediately when the user clicks Stop.
+  if (parentSignal) {
+    if (parentSignal.aborted) controller.abort(parentSignal.reason);
+    else parentSignal.addEventListener("abort", () => controller.abort(parentSignal.reason), { once: true });
+  }
   const promise =
     typeof promiseOrFactory === "function"
       ? promiseOrFactory(controller.signal)

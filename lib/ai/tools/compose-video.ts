@@ -9,6 +9,7 @@ export const composeVideoDefinition: ToolDefinition = {
   name: "compose_video",
   description:
     "Compose the final cut from the shots.\n\n" +
+    "**EASIEST PATH — for each clip just pass `shot_id` and `duration_seconds`. The tool auto-resolves the rendered video URL from the DB.** If the shot has no rendered video, the tool falls back to the hero keyframe as an image_clip (so a still is held for the shot's duration). The `url` field is optional — only set it if you specifically want to use a URL outside the project's assets.\n\n" +
     "**ALWAYS pass `aspect_ratio` to match the user-chosen film spec from the director's context** — do not rely on defaults.\n\n" +
     "**Audio architecture — 3 layers, all optional, all loaded with separate URLs:**\n" +
     "- `voiceover_url` (VO via Runway → ElevenLabs `generate_voiceover`) — 0.85 volume, primary dialog.\n" +
@@ -33,12 +34,14 @@ export const composeVideoDefinition: ToolDefinition = {
             },
             url: {
               type: "string",
-              description: "URL of the video or image asset.",
+              description:
+                "Optional. The tool auto-resolves the URL from shot_id (latest rendered video for that shot, falling back to its hero keyframe). Only set this when you need a URL outside the project's own assets.",
             },
             type: {
               type: "string",
               enum: ["video", "image"],
-              description: "Asset type.",
+              description:
+                "Optional. Defaults to 'video' when the shot has a rendered video, 'image' when only the keyframe exists.",
             },
             label: {
               type: "string",
@@ -48,12 +51,12 @@ export const composeVideoDefinition: ToolDefinition = {
             duration_seconds: {
               type: "number",
               description:
-                "Duration in seconds. For video clips this MUST match the generate_video duration_seconds exactly.",
+                "Duration in seconds. For video clips this MUST match the generate_video duration_seconds exactly. For image_clip shots (held stills), this is the on-screen duration.",
             },
             has_own_audio: {
               type: "boolean",
               description:
-                "True if the video clip was generated with generate_audio=true (ambient SFX baked in). False for silent clips and images. When true, native audio plays at LOW ambient volume under any voiceover.",
+                "Optional. True if the video clip was generated with baked-in audio (rare in the current pipeline). Defaults to false.",
             },
             is_lipsync: {
               type: "boolean",
@@ -61,7 +64,7 @@ export const composeVideoDefinition: ToolDefinition = {
                 "Only for lip-synced clips. Full volume, mutes voiceover during playback. Default false.",
             },
           },
-          required: ["shot_id", "url", "type", "has_own_audio", "duration_seconds"],
+          required: ["shot_id", "duration_seconds"],
         },
         description:
           "Array of clips. Will be sorted by shot_id ascending before rendering — you should pass shot_id on every clip so the final edit respects the script order.",
@@ -157,15 +160,98 @@ export const composeVideoTool: ToolHandler = async (
   context,
   emitter
 ): Promise<ToolResult> => {
-  const rawClips = input.clips as Array<{
+  const rawClipsInput = input.clips as Array<{
     shot_id?: string;
-    url: string;
-    type: "video" | "image";
+    url?: string;
+    type?: "video" | "image";
     label?: string;
     duration_seconds?: number;
     has_own_audio?: boolean;
     is_lipsync?: boolean;
   }>;
+
+  // ── URL RESOLUTION (added 2026-05-12) ─────────────────────────────────
+  // The agent reads project state and sees shots as @tags / shot_ids — the
+  // state block does NOT surface their public_url. Previously, that forced
+  // the agent to invent URLs and compose_video would reject every call.
+  // Now: if a clip is passed with just a shot_id (or with an @-prefixed
+  // "url" that's really a tag), we look up the actual rendered video URL
+  // from generation_assets and substitute it. The agent can pass either
+  // shot_id alone OR shot_id + url and we use whichever resolves.
+  let rawClips: typeof rawClipsInput;
+  {
+    const needsResolve = rawClipsInput.filter(
+      (c) =>
+        c.shot_id &&
+        (!c.url || c.url.startsWith("@") || !c.url.startsWith("http"))
+    );
+    if (needsResolve.length > 0) {
+      // Fetch every shot asset for this generation in one query, then map by
+      // metadata.shot_id. Latest-by-shot_id wins (handles re-shoots).
+      const { data: rows } = await db
+        .from("generation_assets")
+        .select("id, type, public_url, asset_role, metadata, created_at")
+        .eq("generation_id", context.generationId)
+        .eq("type", "video")
+        .order("created_at", { ascending: false });
+      const byShotId = new Map<string, string>();
+      for (const r of (rows || []) as Array<{
+        public_url: string | null;
+        asset_role: string | null;
+        metadata: Record<string, unknown> | null;
+      }>) {
+        const meta = (r.metadata as Record<string, unknown>) || {};
+        const sid = meta.shot_id as string | undefined;
+        const role = r.asset_role || (meta.role as string | undefined);
+        if (sid && role === "shot" && r.public_url && !byShotId.has(sid)) {
+          byShotId.set(sid, r.public_url);
+        }
+      }
+      // Also support the keyframe-as-image_clip path: if a shot wasn't
+      // rendered as a video but has a hero keyframe, use that as an image.
+      const { data: kfRows } = await db
+        .from("generation_assets")
+        .select("public_url, asset_role, metadata")
+        .eq("generation_id", context.generationId)
+        .eq("type", "image")
+        .eq("asset_role", "keyframe");
+      const kfByShotId = new Map<string, string>();
+      for (const r of (kfRows || []) as Array<{
+        public_url: string | null;
+        metadata: Record<string, unknown> | null;
+      }>) {
+        const meta = (r.metadata as Record<string, unknown>) || {};
+        const sid = meta.shot_id as string | undefined;
+        if (sid && r.public_url && !kfByShotId.has(sid)) {
+          kfByShotId.set(sid, r.public_url);
+        }
+      }
+      rawClips = rawClipsInput.map((c) => {
+        if (c.url && c.url.startsWith("http")) return c;
+        if (!c.shot_id) return c;
+        const videoUrl = byShotId.get(c.shot_id);
+        if (videoUrl) {
+          return { ...c, url: videoUrl, type: c.type ?? "video" };
+        }
+        const kfUrl = kfByShotId.get(c.shot_id);
+        if (kfUrl) {
+          // Fallback: shot wasn't rendered as video, use keyframe as still.
+          return { ...c, url: kfUrl, type: "image" as const };
+        }
+        return c; // unresolved — the validator below will report
+      });
+      const resolved = rawClips.filter(
+        (c, i) => rawClips[i] !== rawClipsInput[i]
+      ).length;
+      if (resolved > 0) {
+        console.log(
+          `[tool:compose_video] resolved ${resolved}/${rawClipsInput.length} clip URL(s) from shot_id`
+        );
+      }
+    } else {
+      rawClips = rawClipsInput;
+    }
+  }
 
   // Sort by shot_id ascending so the cut respects the script regardless of the
   // order the agent built its clips array in. shot_ids look like "shot_1", "shot_2".
@@ -242,18 +328,23 @@ export const composeVideoTool: ToolHandler = async (
 
   const invalidClips = clips.filter((c) => !c.url || !c.url.startsWith("http"));
   if (invalidClips.length > 0) {
+    const failedIds = invalidClips.map((c) => c.shot_id || "?").join(", ");
     return {
       success: false,
-      content: `${invalidClips.length} clip(s) have invalid URLs. All clips must have valid HTTP URLs. Check that previous generation steps completed successfully.`,
+      content: `${invalidClips.length} clip(s) could not be resolved to a video / keyframe URL (shot_id: ${failedIds}). The compose tool now auto-resolves shot_id → URL from the DB — if it still failed, that shot is genuinely missing both a rendered video AND a hero keyframe. Render the shot or its keyframe first, then retry compose.`,
     };
   }
 
-  const imageClips = clips.filter((c) => c.type !== "video");
-  if (imageClips.length > 0) {
-    return {
-      success: false,
-      content: `${imageClips.length} clip(s) are not videos. compose_video only accepts rendered video assets from generate_video — never pass keyframe/image URLs as clips. If a shot wasn't rendered, render it first before composing.`,
-    };
+  // Image clips ARE permitted — they correspond to Shot.model === "image_clip"
+  // (a deliberate held still, or a graceful fallback to the hero keyframe when
+  // the shot's video wasn't rendered). Remotion's AdComposition handles both
+  // video and image clip types natively. The previous strict-video check
+  // blocked legitimate compose runs.
+  const stillCount = clips.filter((c) => c.type !== "video").length;
+  if (stillCount > 0) {
+    console.log(
+      `[tool:compose_video] ${stillCount}/${clips.length} clips are held stills (image_clip or keyframe-fallback).`
+    );
   }
 
   const missingShotId = clips.filter((c) => !c.shot_id);
@@ -303,15 +394,17 @@ export const composeVideoTool: ToolHandler = async (
   });
 
   try {
-    // Build Remotion inputProps
+    // Build Remotion inputProps. After URL resolution + the validator above,
+    // every clip is guaranteed to have a string url; the assertions silence
+    // the now-optional types from the input schema.
     const compositionClips = clips.map((clip) => {
       return {
-        url: clip.url,
-        type: clip.type,
+        url: clip.url as string,
+        type: (clip.type ?? "video") as "video" | "image",
         durationFrames: Math.round((clip.duration_seconds || 5) * fps),
         label: clip.label || "clip",
         hasOwnAudio: clip.has_own_audio === true,
-        isLipsync: clip.is_lipsync === true, // Only lipsync clips play at full volume and mute VO
+        isLipsync: clip.is_lipsync === true,
       };
     });
 

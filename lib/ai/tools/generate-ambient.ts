@@ -88,11 +88,29 @@ export const generateAmbientTool: ToolHandler = async (
   // Wong Kar-wai late-night neon vs Villeneuve architectural silence).
   const persona = context.leadDirector;
   const soundNote = persona?.soundDesignNote?.trim();
-  const directorTag =
-    soundNote && mode === "bed"
-      ? ` — sound design in the signature of ${persona?.name ?? "the lead director"}: ${soundNote}`
-      : "";
-  const finalPrompt = `${description}${directorTag}`.slice(0, 900);
+  // Runway's soundEffect endpoint hard-limits promptText to 450 chars. We
+  // budget ~300 for the user-authored description and ~140 for the director
+  // DNA tag, leaving headroom for the separator. If the description alone
+  // is over 300 we trim it; the director tag is then truncated proportionally.
+  const RUNWAY_PROMPT_CAP = 450;
+  const DIRECTOR_TAG_PREFIX = soundNote && mode === "bed"
+    ? ` — sound design in the signature of ${persona?.name ?? "the lead director"}: `
+    : "";
+  const descBudget = soundNote && mode === "bed" ? 300 : RUNWAY_PROMPT_CAP - 10;
+  const trimmedDescription = description.length > descBudget
+    ? description.slice(0, descBudget - 1).trimEnd() + "…"
+    : description;
+  let directorTag = "";
+  if (DIRECTOR_TAG_PREFIX && soundNote) {
+    const remaining = RUNWAY_PROMPT_CAP - trimmedDescription.length - DIRECTOR_TAG_PREFIX.length - 2;
+    if (remaining > 30) {
+      const note = soundNote.length > remaining
+        ? soundNote.slice(0, remaining - 1).trimEnd() + "…"
+        : soundNote;
+      directorTag = `${DIRECTOR_TAG_PREFIX}${note}`;
+    }
+  }
+  const finalPrompt = `${trimmedDescription}${directorTag}`.slice(0, RUNWAY_PROMPT_CAP);
 
   // Duration heuristic: BED defaults to the film duration so compose_video
   // can loop a single track under the whole cut. SFX defaults to 4s.

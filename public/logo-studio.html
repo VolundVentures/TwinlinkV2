@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TwinLink Director — Logo Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #f5f5f5;
+        font-family: 'Geist Mono', monospace;
+        color: #1a1a1a;
+      }
+      .shell {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 56px 32px;
+      }
+      h1 {
+        font-family: 'Instrument Serif', serif;
+        font-size: 36px;
+        margin: 0 0 8px;
+        letter-spacing: -0.5px;
+      }
+      .subtitle {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.22em;
+        color: #888;
+        margin-bottom: 40px;
+      }
+      .stage {
+        background: #ffffff;
+        border: 1px solid #e5e5e5;
+        padding: 80px 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 220px;
+        position: relative;
+        overflow: hidden;
+      }
+      .stage.dark {
+        background: #0a0a0a;
+        border-color: #1a1a1a;
+      }
+      .stage.checker {
+        background-image:
+          linear-gradient(45deg, #e8e8e8 25%, transparent 25%),
+          linear-gradient(-45deg, #e8e8e8 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #e8e8e8 75%),
+          linear-gradient(-45deg, transparent 75%, #e8e8e8 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, 10px 0;
+      }
+      .wordmark {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 16px;
+        line-height: 1;
+      }
+      .wordmark .name {
+        font-family: 'Instrument Serif', serif;
+        font-size: 72px;
+        letter-spacing: -1px;
+      }
+      .wordmark .tag {
+        font-family: 'Geist Mono', monospace;
+        font-size: 22px;
+        text-transform: uppercase;
+        letter-spacing: 0.32em;
+        color: #9ca3af;
+        position: relative;
+        top: -6px;
+      }
+      .stage.light .name { color: #1a1a1a; }
+      .stage.light .tag  { color: #9ca3af; }
+      .stage.dark  .name { color: #ffffff; }
+      .stage.dark  .tag  { color: #d4d4d4; }
+      .stage.checker .name { color: #1a1a1a; }
+      .stage.checker .tag  { color: #6b7280; }
+
+      .controls {
+        margin-top: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .controls .label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: #6b7280;
+        margin-right: 8px;
+      }
+      button {
+        background: #1a1a1a;
+        color: white;
+        border: none;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      button:hover { background: #333; }
+      button.ghost {
+        background: white;
+        color: #1a1a1a;
+        border: 1px solid #d4d4d4;
+      }
+      button.ghost:hover { border-color: #1a1a1a; }
+      .row {
+        margin-bottom: 28px;
+      }
+      .meta {
+        margin-top: 14px;
+        font-size: 11px;
+        color: #888;
+      }
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: #1a1a1a;
+        color: white;
+        padding: 12px 18px;
+        font-size: 12px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity .2s, transform .2s;
+        pointer-events: none;
+      }
+      .toast.show { opacity: 1; transform: translateY(0); }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <h1>TwinLink Director — Wordmark Studio</h1>
+      <p class="subtitle">Pick a background, pick a resolution, download a PNG</p>
+
+      <div class="row">
+        <div class="stage light" id="stage-light">
+          <div class="wordmark" id="wordmark-light">
+            <span class="name">TwinLink</span><span class="tag">Director</span>
+          </div>
+        </div>
+        <div class="controls">
+          <span class="label">Light bg, opaque</span>
+          <button onclick="exportPng('light', 1)">PNG @1×</button>
+          <button onclick="exportPng('light', 2)">PNG @2×</button>
+          <button onclick="exportPng('light', 4)">PNG @4×</button>
+          <button onclick="exportPng('light', 8)">PNG @8×</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="stage dark" id="stage-dark">
+          <div class="wordmark" id="wordmark-dark">
+            <span class="name">TwinLink</span><span class="tag">Director</span>
+          </div>
+        </div>
+        <div class="controls">
+          <span class="label">Dark bg, opaque</span>
+          <button onclick="exportPng('dark', 1)">PNG @1×</button>
+          <button onclick="exportPng('dark', 2)">PNG @2×</button>
+          <button onclick="exportPng('dark', 4)">PNG @4×</button>
+          <button onclick="exportPng('dark', 8)">PNG @8×</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="stage checker" id="stage-checker">
+          <div class="wordmark" id="wordmark-checker">
+            <span class="name">TwinLink</span><span class="tag">Director</span>
+          </div>
+        </div>
+        <div class="controls">
+          <span class="label">Transparent bg</span>
+          <button onclick="exportPng('transparent', 1)">PNG @1×</button>
+          <button onclick="exportPng('transparent', 2)">PNG @2×</button>
+          <button onclick="exportPng('transparent', 4)">PNG @4×</button>
+          <button onclick="exportPng('transparent', 8)">PNG @8×</button>
+        </div>
+        <p class="meta">The checkered preview just shows you what transparent looks like — the actual PNG export has true alpha transparency, no checker pattern baked in.</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">rendering…</div>
+
+    <script>
+      const NAME_TEXT = 'TwinLink';
+      const TAG_TEXT  = 'Director';
+
+      // Base size — these match the CSS rendering 1:1 at @1×
+      const BASE_NAME_PX = 72;
+      const BASE_TAG_PX  = 22;
+      const BASE_GAP_PX  = 16;
+      const TAG_LETTER_SPACING_EM = 0.32;
+      const NAME_LETTER_SPACING_PX = -1;
+      const PAD_X = 60;
+      const PAD_Y = 80;
+
+      function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1500);
+      }
+
+      async function ensureFontsReady() {
+        // Make sure both Google Fonts are loaded before measuring/rendering.
+        await document.fonts.load(`400 ${BASE_NAME_PX}px "Instrument Serif"`);
+        await document.fonts.load(`500 ${BASE_TAG_PX}px "Geist Mono"`);
+        await document.fonts.ready;
+      }
+
+      // Render the wordmark to a canvas at a given pixel scale + background.
+      // Returns the canvas; caller exports it.
+      async function renderToCanvas(bg, scale) {
+        await ensureFontsReady();
+
+        // Measure first at 1× to compute layout dimensions
+        const measureCanvas = document.createElement('canvas');
+        const m = measureCanvas.getContext('2d');
+
+        // For TwinLink (serif)
+        m.font = `400 ${BASE_NAME_PX}px "Instrument Serif", "Times New Roman", serif`;
+        const nameMetrics = m.measureText(NAME_TEXT);
+        const nameWidth =
+          nameMetrics.width +
+          // approximate letter-spacing effect — Canvas doesn't do it natively,
+          // we'll apply it by drawing chars individually.
+          NAME_LETTER_SPACING_PX * (NAME_TEXT.length - 1);
+
+        // For DIRECTOR (mono uppercase)
+        m.font = `500 ${BASE_TAG_PX}px "Geist Mono", monospace`;
+        const tagText = TAG_TEXT.toUpperCase();
+        const tagLetterSpacingPx = BASE_TAG_PX * TAG_LETTER_SPACING_EM;
+        let tagWidth = 0;
+        for (const ch of tagText) tagWidth += m.measureText(ch).width;
+        tagWidth += tagLetterSpacingPx * (tagText.length - 1);
+
+        const wordmarkWidth = nameWidth + BASE_GAP_PX + tagWidth;
+        const wordmarkHeight = BASE_NAME_PX;   // baseline-aligned visual height
+
+        const canvasWidth = Math.ceil((wordmarkWidth + PAD_X * 2) * scale);
+        const canvasHeight = Math.ceil((wordmarkHeight + PAD_Y * 2) * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.textBaseline = 'alphabetic';
+
+        // Background
+        if (bg === 'light') {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvasWidth / scale, canvasHeight / scale);
+        } else if (bg === 'dark') {
+          ctx.fillStyle = '#0a0a0a';
+          ctx.fillRect(0, 0, canvasWidth / scale, canvasHeight / scale);
+        }
+        // transparent → leave blank
+
+        const baselineY = PAD_Y + BASE_NAME_PX * 0.78; // visual baseline tuned for Instrument Serif
+
+        // Draw TwinLink with manual letter-spacing
+        ctx.fillStyle = bg === 'dark' ? '#ffffff' : '#1a1a1a';
+        ctx.font = `400 ${BASE_NAME_PX}px "Instrument Serif", "Times New Roman", serif`;
+        let cursorX = PAD_X;
+        for (const ch of NAME_TEXT) {
+          ctx.fillText(ch, cursorX, baselineY);
+          cursorX += ctx.measureText(ch).width + NAME_LETTER_SPACING_PX;
+        }
+
+        // Draw DIRECTOR — baseline tweaked for visual alignment with serif's cap height
+        ctx.fillStyle = bg === 'dark' ? '#d4d4d4' : '#9ca3af';
+        ctx.font = `500 ${BASE_TAG_PX}px "Geist Mono", monospace`;
+        const tagBaselineY = baselineY - BASE_NAME_PX * 0.40;
+        let tagX = PAD_X + nameWidth + BASE_GAP_PX;
+        for (const ch of tagText) {
+          ctx.fillText(ch, tagX, tagBaselineY);
+          tagX += ctx.measureText(ch).width + tagLetterSpacingPx;
+        }
+
+        return canvas;
+      }
+
+      async function exportPng(bg, scale) {
+        showToast(`rendering @${scale}×…`);
+        const canvas = await renderToCanvas(bg, scale);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            showToast('failed');
+            return;
+          }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `twinlink-director-${bg}-${scale}x.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showToast(`saved @${scale}×`);
+        }, 'image/png');
+      }
+    </script>
+  </body>
+</html>

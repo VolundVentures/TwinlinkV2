@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 90" fill="none" preserveAspectRatio="xMidYMid meet" font-family="Instrument Serif, Times New Roman, serif">
+  <defs>
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist+Mono:wght@400&amp;display=swap');
+      .serif  { font-family: 'Instrument Serif', 'Times New Roman', serif; font-weight: 400; }
+      .mono   { font-family: 'Geist Mono', 'Courier New', monospace; font-weight: 400; }
+    </style>
+  </defs>
+
+  <!-- TwinLink — serif, near-black -->
+  <text x="0" y="60" class="serif" font-size="56" fill="#1A1A1A" letter-spacing="-0.5">TwinLink</text>
+
+  <!-- DIRECTOR — mono uppercase, mid-gray, generous letter-spacing -->
+  <text x="245" y="55" class="mono" font-size="22" fill="#9CA3AF" letter-spacing="6" textLength="180" lengthAdjust="spacingAndGlyphs">DIRECTOR</text>
+</svg>

@@ -1,7 +1,7 @@
 // generate_ambient — film-wide ambient sound bed via Runway → ElevenLabs
 // (eleven_text_to_sound_v2).
 //
-// Sits between the score (Suno, melodic, foregrounded) and silence: a quiet
+// Sits between the score (seed_audio, melodic, foregrounded) and silence: a quiet
 // textured layer of room tone, weather, distant traffic, breath of space.
 // One call per film for the master ambient bed; the agent may fire a second
 // targeted call for a beat-specific SFX (e.g. a single door close, a single

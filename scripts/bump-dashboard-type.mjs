@@ -26,26 +26,17 @@ const FILES = [
   "components/dashboard/mobile-nav.tsx",
   // Director surface (the screenshot)
   "components/director/director-shell.tsx",
-  "components/director/director-widgets.tsx",
   "components/director/chat-pane.tsx",
   "components/director/workspace-pane.tsx",
-  "components/director/suggestions-strip.tsx",
   "components/director/cast.tsx",
   "components/director/brief-form.tsx",
   "components/director/asset-modal.tsx",
-  "components/director/film-school.tsx",
   "components/director/recent-films.tsx",
   "components/director/mention-input.tsx",
   "components/director/markdown.tsx",
   "components/director/attach-button.tsx",
   "components/director/workflow-canvas.tsx",
   // Auteur (lobby + studio)
-  "components/auteur/lobby.tsx",
-  "components/auteur/studio-shell.tsx",
-  "components/auteur/staged-loader.tsx",
-  "components/auteur/avatar-tile.tsx",
-  "components/auteur/whiteboard.tsx",
-  "components/auteur/tile-skeleton.tsx",
 ];
 
 // Pass 1 — bump 11px caps to 12px (slightly looser tracking on tightest case).

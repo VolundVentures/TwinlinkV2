@@ -2,8 +2,8 @@ import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber, formatDbError } from "./types";
 // Runway pivot (May 2026 AUTEUR): swapped Nano Banana → gpt_image_2 via lib/runway.
 // Keyframes are the first frame of the Frame Anchor pipeline — character bible
-// + scene description composed into a still that Gen-4.5 i2v then animates.
-import { editImage, toGptImage2Ratio } from "@/lib/runway";
+// + scene description composed into a still that Seedance 2.5 renders into a 25s scene.
+import { editImage, toGptImageRatio } from "@/lib/runway";
 import { withAntiPrompt } from "@/lib/ai/prompts/anti-prompt-suffix";
 import { isValidTag, normalizeTag } from "@/lib/ai/tag-resolver";
 import { db } from "@/lib/db";
@@ -30,7 +30,7 @@ export type KeyframeRole = "hero" | "first_frame" | "last_frame";
 export const generateKeyframeDefinition: ToolDefinition = {
   name: "generate_keyframe",
   description:
-    "Compose a cinematic still from plates via gpt_image_2 edit mode, using the STRUCTURED DP spec from write_script.\n\n" +
+    "Compose a cinematic still from plates via GPT Image 2.5 edit mode, using the STRUCTURED DP spec from write_script.\n\n" +
     "**EASIEST PATH — just pass `shot_id` and `role`.** The tool will look up the matching shot's `shot_spec` from the script asset automatically. Do NOT rebuild the spec from memory — Sonnet has been observed shaping it wrong (camera fields nested, staging flattened) and looping. Trust the script.\n\n" +
     "**Optional override:** if you genuinely want to deviate from the script's spec, you can pass `shot_spec` inline (VERBATIM all fields). If you pass an inline spec and it's incomplete, the tool falls back to the script's version.\n\n" +
     "**Schema reminder (if you must pass inline):** three nested object fields — `staging: { camera_position, subject_action }`, `depth: { midground }`, `continuity: { match }`. Everything else is flat at shot_spec's top level: scale, lens_mm, angle, movement, subject_position, eye_direction, key_direction, key_quality, key_color_k, fill_ratio, purpose, mood, subject_plate.\n\n" +
@@ -397,7 +397,7 @@ export const generateKeyframeTool: ToolHandler = async (
     const taskResult = await editImage({
       promptText: finalPrompt,
       inputImages: imageUrls.map((uri) => ({ uri })),
-      ratio: toGptImage2Ratio(aspectRatio),
+      ratio: toGptImageRatio(aspectRatio),
       generationId: context.generationId,
       description: `keyframe @${tag} (${aspectRatio})`,
     });

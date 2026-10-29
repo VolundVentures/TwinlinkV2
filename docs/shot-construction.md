@@ -41,7 +41,7 @@ Each edit changes one axis while preserving the rest. The chain is how identity 
 | Dialogue (two shots, shot/reverse) | hero | Motion is gaze + micro-expression. |
 | Close-up on a reaction | hero | Motion is implied by held breath, shift of eyes. |
 | Product reveal | hero | Motion is the video model's job; one keyframe is enough. |
-| Kiss, emotional landing | hero | Proximity change is micro; Kling handles it. |
+| Kiss, emotional landing | hero | Proximity change is micro; Seedance handles it. |
 | Held environmental establishing | hero | Almost no motion. |
 | CCTV / POV shift through space | hero | Fisheye + scan-lines + movement is prompt-driven. |
 | Door closed → door open | first_and_last | 5-word nameable transition. |
@@ -195,14 +195,13 @@ The agent executes the four steps in order: three `edit_plate` calls, then one `
 
 ## Shot-count & duration pacing
 
-Festival-tier commercial pacing runs roughly one shot every 4 seconds on average, with individual shots between 2 and 5 seconds.
+The film is N × 25-second scenes plus a 3–5s end card.
 
-- 15s film ≈ 4 shots
-- 30s film ≈ 8 shots
-- 60s film ≈ 15 shots
-- 120s film ≈ 30 shots
+- 30s film = 1 scene + end card
+- 60s film = 2 scenes + end card
+- 90s film = 3 scenes + end card
 
-**Hard 5s cap per shot.** Kling fills longer interpolations with noise — if a beat needs more screen time, split it into two or three shots with match cuts (graphic / action / light continuity).
+**A scene is 25 seconds.** Seedance 2.5 renders 4–30s with native audio from one keyframe; the turn of the scene happens inside it as a timed beat. Cuts come from coverage (`generate_coverage`), not from chopping the script.
 
 ---
 

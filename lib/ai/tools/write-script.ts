@@ -1,7 +1,7 @@
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber } from "./types";
 import { videoScriptPrompt } from "@/lib/ai/prompts/script-writer";
-import { generateStructuredJSON } from "@/lib/ai/claude";
+import { generateStructuredJSON, DEFAULT_SCRIPT_MODEL } from "@/lib/ai/llm";
 import { db } from "@/lib/db";
 import type { Brand } from "@/lib/database.types";
 import type { ShotSpec } from "@/lib/ai/prompts/shot-grammar";
@@ -21,7 +21,7 @@ function truncatePhrase(s: string, max: number): string {
 }
 
 // ============================================================================
-// Slim script schema — aligned with the new Kling-Omni / 6-kind-plate / @tag
+// Slim script schema — 25s Seedance scenes / 6-kind-plate / @tag
 // methodology. Individual keyframes are NOT pre-planned here — the agent
 // composes them at production time via generate_keyframe.
 // ============================================================================
@@ -81,14 +81,14 @@ type Shot = {
   label: string;
   /** Final on-screen duration. The agent picks the tool to deliver it. */
   duration_seconds: number;
-  /** Preferred tool — agent may chain (e.g. master + Aleph variants for time-lapse). */
-  model: "gen4_5_i2v" | "image_clip" | "aleph_variant" | "aleph_extend";
+  /** seedance_scene for every narrative scene; image_clip for the end card. */
+  model: "seedance_scene" | "image_clip";
   plate_refs: string[];
   keyframe_plan: "hero" | "image_only";
   motion: string;
   /**
    * Structured shot spec — DP-level framing/blocking/lighting. generate_keyframe
-   * uses this to build its Nano Banana prompt. Every plate_ref MUST be assigned
+   * uses this to build its GPT Image 2.5 prompt. Every plate_ref MUST be assigned
    * a role here (subject_plate / location_plate / prop_plates / wardrobe_plates
    * / vfx_plates) or the keyframe tool will reject the shot.
    *
@@ -127,7 +127,7 @@ const SHOT_SPEC_SCHEMA: Record<string, unknown> = {
     staging: {
       type: "object",
       description:
-        "Scene staging — the single most important section. Describes what is physically in the frame. Nano Banana follows explicit physics precisely, but invents nonsense when underspecified.",
+        "Scene staging — the single most important section. Describes what is physically in the frame. GPT Image 2.5 follows explicit physics precisely, but invents nonsense when underspecified.",
       properties: {
         camera_position: {
           type: "string",
@@ -477,28 +477,23 @@ const SCRIPT_SCHEMA: Record<string, unknown> = {
           label: { type: "string" },
           duration_seconds: {
             type: "integer",
-            minimum: 2,
+            minimum: 3,
             maximum: 30,
             description:
-              "Final on-screen duration in seconds. Integer. The right TOOL per range: gen4_5_i2v renders any integer 2-10s exactly (no trim); image_clip holds a still for ANY length 2-30s; aleph chains can extend a master past 10s with continuity-locked variants. Choose what serves the moment — a 2s reaction, a 7s sustained gaze, a 15s held image with score, a 30s time-lapse all valid.",
+              "On-screen duration in seconds. Every narrative scene is 25 (Seedance 2.5 range 4–30). The end card is 3–5.",
           },
           model: {
             type: "string",
-            enum: [
-              "gen4_5_i2v",
-              "image_clip",
-              "aleph_variant",
-              "aleph_extend",
-            ],
+            enum: ["seedance_scene", "image_clip"],
             description:
-              "Tool the agent should reach for FIRST. gen4_5_i2v = motion via Gen-4.5 image-to-video, the default for any shot with motion (any integer 2-10s — pass duration_seconds straight through, no trim). image_clip = a still held in Remotion for any length (no motion call); use for end cards, photographic moments, or as the anchor frame for a sustained-subject sequence. aleph_variant = use Aleph to derive an alternate angle / time-of-day / weather of an existing master shot (5s, perfect for time-lapse continuity or coverage). aleph_extend = chain Aleph passes off a master to extend past 10s when continuity matters more than fresh motion.",
+              "seedance_scene = a 25s scene rendered by Seedance 2.5 from the composed keyframe, with native audio. image_clip = a still held in Remotion — end card only.",
           },
           plate_refs: { type: "array", items: { type: "string" } },
           keyframe_plan: {
             type: "string",
             enum: ["hero", "image_only"],
             description:
-              "hero = DEFAULT. One keyframe + motion prompt. Use for any moving shot. image_only = static (end card or held photograph; Remotion plays the image for the shot's duration_seconds).",
+              "hero = every narrative scene (one keyframe = frame 0 + scene direction). image_only = end card (Remotion holds the image for duration_seconds).",
           },
           motion: { type: "string" },
           shot_spec: SHOT_SPEC_SCHEMA,
@@ -548,9 +543,9 @@ const SCRIPT_SCHEMA: Record<string, unknown> = {
 export const writeScriptDefinition: ToolDefinition = {
   name: "write_script",
   description:
-    "Direct the film's treatment + shot list. Output: title, logline, end card, color script, camera rule, plate list (6 kinds), shot list (with id/duration/model/plate_refs/keyframe_plan/motion). Pre-plans the STRUCTURE only — individual keyframes are composed per shot later via generate_keyframe.\n\n" +
+    "Direct the film's treatment + scene list. Output: title, logline, end card, color script, camera rule, plate list (6 kinds), scene list (id / 25s duration / model / plate_refs / keyframe_plan / scene direction). Pre-plans the STRUCTURE only — keyframes are composed per scene later via generate_keyframe.\n\n" +
     "Call this ONCE per film, right after user approves the brief. Costs 1 credit.\n\n" +
-    "**Model** is Opus 4.6 with a slim structured schema — typically returns in 30–90s.",
+    "Structured output from the script model — typically returns in 20–60s.",
   input_schema: {
     type: "object",
     properties: {
@@ -683,11 +678,11 @@ export const writeScript: ToolHandler = async (
           (f) =>
             `${f.title} (${f.techniques?.slice(0, 2).join(", ") || "—"})`
         )
-        .join("; ")}. Do NOT imitate dialogue or in-shot sound — audio is composed in post. Treat every shot as silent cinema; let blocking, light, and motion carry the story.\n`
+        .join("; ")}. Scenes are 25 seconds with native sound — dialogue may be written into the scene direction when it serves the film, under-written and sparse; blocking, light and motion still carry the story.\n`
     : "";
 
   const system =
-    "You are a commercial director at the level of Jonathan Glazer, Park Chan-wook, Chloé Zhao, Wong Kar-wai. You output a LEAN JSON treatment + shot list. You do not pre-plan individual keyframe compositions — those happen at production time. You think in plates, shots, end cards. You are ruthlessly specific about lenses, palette, camera rule." +
+    "You are a commercial director at the level of Jonathan Glazer, Park Chan-wook, Chloé Zhao, Wong Kar-wai. You output a LEAN JSON treatment + scene list (25-second scenes). You do not pre-plan individual keyframe compositions — those happen at production time. You think in plates, scenes, end cards. You are ruthlessly specific about lenses, palette, camera rule." +
     directorPreamble;
 
   const MAX_RETRIES = 2;
@@ -704,21 +699,10 @@ export const writeScript: ToolHandler = async (
         });
       }
 
-      // Haiku 4.5 for the treatment. Sonnet was 30-90s and the user spent
-      // that whole window watching the director go silent or hallucinate
-      // cinema-school references about a film that didn't exist yet. Haiku
-      // 4.5 produces this structured DP-style spec in 8-15s — the user gets
-      // a treatment fast enough that the WRITING-mode teaching window is
-      // short. Quality is fine for the schema we constrain it to (the
-      // system prompt does the heavy lifting). Override with SCRIPT_MODEL
-      // env to A/B against Sonnet.
-      //
-      // (NOTE: write_script must run ONCE per project. The agent system
-      // prompt's pipeline-order rule forbids re-running it. If the user
-      // wants edits, the front-end uses /api/agent/run with an edit
-      // directive, not a new write_script call.)
+      // gpt-6-sol for the treatment (structured function-call output).
+      // Override with SCRIPT_MODEL. write_script runs ONCE per project.
       const script = await generateStructuredJSON<VideoScript>({
-        model: process.env.SCRIPT_MODEL || "claude-haiku-4-5",
+        model: process.env.SCRIPT_MODEL || DEFAULT_SCRIPT_MODEL,
         maxTokens: 16384,
         temperature: 0.8,
         system,

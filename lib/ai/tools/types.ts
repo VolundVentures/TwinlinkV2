@@ -94,28 +94,25 @@ export function formatDbError(
 // Credit costs per tool — AUTEUR pipeline (May 2026)
 // ============================================
 export const TOOL_CREDIT_COSTS: Record<string, number> = {
-  // Pre-existing TwinLink tools
+  // 1 app credit ≈ $0.04. Runway: Seedance 2.5 = 30 cr/s output (+15 cr/s
+  // reference video) at 720p; GPT Image 2.5 ≈ 12 cr/image at high/1K.
   write_script: 1,
   generate_plate: 3,
-  edit_plate: 2,
-  generate_keyframe: 2,
+  edit_plate: 3,
+  generate_keyframe: 3,
   generate_image: 3,
-  generate_video: 15,           // Gen-4.5 i2v 5s @ 12 cr/s ≈ 60 cr ($0.60)
-  edit_video: 12,                // Aleph 5s @ 15 cr/s
-  generate_music: 5,
+  generate_video: 190,          // 25s scene @ 30 cr/s = 750 cr ($7.50)
+  edit_video: 280,               // 25s in-place edit @ 45 cr/s ≈ 1,125 cr
+  generate_coverage: 280,        // 25s reference-mode scene @ 45 cr/s
+  apply_signature_pass: 280,     // 25s in-place grade @ 45 cr/s
+  finish_film: 270,              // 30s × 30fps × $0.012 ≈ $11
+  generate_music: 2,             // seed_audio 0.25 cr/s
   generate_voiceover: 3,
-  generate_ambient: 4,           // Runway eleven_text_to_sound_v2
-  extract_frame: 1,
+  generate_ambient: 4,           // eleven_text_to_sound_v2
   compose_video: 5,
   search_reference: 1,
   list_assets: 0,
   request_approval: 0,
-
-  // AUTEUR / Runway pipeline (May 2026)
-  generate_coverage: 12,         // Aleph 5s alternate angle
-  apply_signature_pass: 12,      // Aleph 5s director's grade
-  apply_director_note: 12,       // Aleph 5s surgical edit
-  cite_lesson: 0,                // accumulator only — free
 };
 
 // Timeout per tool (ms). Must be larger than the underlying prediction's
@@ -127,20 +124,16 @@ export const TOOL_TIMEOUTS: Record<string, number> = {
   edit_plate: 660_000,
   generate_keyframe: 660_000,
   generate_image: 660_000,
-  generate_video: 600_000,       // Gen-4.5 i2v ~30-180s
-  edit_video: 600_000,            // Aleph ~30-90s
-  generate_music: 660_000,
+  generate_video: 900_000,       // Seedance 2.5 25s ≈ 3–8 min
+  edit_video: 900_000,
+  generate_coverage: 900_000,
+  apply_signature_pass: 900_000,
+  finish_film: 900_000,
+  generate_music: 300_000,
   generate_voiceover: 120_000,
   generate_ambient: 180_000,
-  extract_frame: 180_000,
   compose_video: 300_000,
   search_reference: 60_000,
   list_assets: 10_000,
   request_approval: 5_000,
-
-  // AUTEUR / Runway pipeline
-  generate_coverage: 600_000,
-  apply_signature_pass: 600_000,
-  apply_director_note: 600_000,
-  cite_lesson: 5_000,
 };

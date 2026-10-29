@@ -2,7 +2,7 @@ import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { SSEEmitter } from "@/lib/ai/sse-emitter";
 import { runAgentLoop } from "@/lib/ai/agent-loop";
-import { generateText } from "@/lib/ai/claude";
+import { generateText, DEFAULT_FAST_MODEL } from "@/lib/ai/llm";
 import { formatCostBreakdown, clearGenerationCosts } from "@/lib/generation/cost-tracker";
 import { getPersonaById } from "@/lib/directors";
 import type { AgentContext } from "@/lib/ai/tools/types";
@@ -109,9 +109,8 @@ export async function POST(request: Request) {
     }
     generationId = existing.id;
 
-    // AUTEUR project state (cast, lesson_plan, whiteboard_images) lives in
-    // generations.agent_config — the only jsonb column on generations. The
-    // metadata column doesn't exist on this table.
+    // Project state (cast, aspect, duration) lives in generations.agent_config
+    // — the only jsonb column on generations.
     const cfg = (existing.agent_config as Record<string, unknown> | null) || {};
     leadDirectorId = (cfg.lead_director_id as string | undefined) || body.leadDirectorId;
     coDirectorId = (cfg.co_director_id as string | undefined) || body.coDirectorId;
@@ -124,8 +123,6 @@ export async function POST(request: Request) {
     const initialAgentConfig: Record<string, unknown> = {
       lead_director_id: leadDirectorId || null,
       co_director_id: coDirectorId || null,
-      lesson_plan: [],
-      whiteboard_images: [],
       aspect_ratio: body.aspectRatio || null,
       duration_seconds: body.durationSeconds || null,
     };
@@ -271,7 +268,7 @@ export async function POST(request: Request) {
         let title = prompt.slice(0, 60);
         try {
           const titleText = await generateText({
-            model: "claude-sonnet-4-6",
+            model: DEFAULT_FAST_MODEL,
             maxTokens: 50,
             temperature: 0.3,
             system:

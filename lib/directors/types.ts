@@ -52,11 +52,11 @@ export type DirectorPersona = {
   startScript: string;
   /** Prose description of the visual signature for prompt augmentation. */
   visualSignature: string;
-  /** 3-5 Aleph signature pass prompts — color/grade/lighting fingerprint. */
+  /** 3-5 signature grade prompts (Seedance edit mode) — color/grade/lighting fingerprint. */
   alephSignaturePrompts: string[];
   /** String prepended to gpt_image_2 prompts to imprint the director's image style. */
   imageStyleModifier: string;
-  /** Suno prompt augmentation for score generation. */
+  /** Score prompt augmentation (Runway seed_audio). */
   scoreModifier: string;
   /** ElevenLabs `text_to_sound_v2` prompt seed — shapes ambient + diegetic SFX. */
   soundDesignNote: string;

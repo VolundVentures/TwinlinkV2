@@ -6,7 +6,7 @@
 //      b) explicit voice_id passed by the agent
 //      c) style-keyword pick from the curated ElevenLabs voice catalog
 //      d) safe fallback (a warm female voice)
-//   2. Send to Runway `textToSpeech` (model: eleven_multilingual_v2) — this
+//   2. Send to Runway `textToSpeech` (model: eleven_v3) — this
 //      is ElevenLabs under the hood, so credit + cost telemetry rolls up to
 //      the Runway account.
 //   3. Mirror the output URL into Supabase Storage so the Remotion compose
@@ -19,7 +19,7 @@ import { persistAsset } from "@/lib/generation/persist-asset";
 import { db } from "@/lib/db";
 
 // Curated ElevenLabs voice catalog — same IDs as the legacy TTS module so the
-// behaviour transfers 1:1. Runway's `eleven_multilingual_v2` model accepts
+// behaviour transfers 1:1. Runway's `eleven_v3` model accepts
 // ElevenLabs voice IDs directly because Runway delegates to ElevenLabs.
 const VOICE_CATALOG = {
   hale:        { id: "wWWn96OtTHu1sn8SRGEr", style: "expressive, deep, emotive",       bestFor: "storytelling, emotional, brand films" },
@@ -60,7 +60,7 @@ function resolveVoiceId(idOrName: string): string {
 export const generateVoiceoverDefinition: ToolDefinition = {
   name: "generate_voiceover",
   description:
-    "Generate voiceover audio via Runway-routed ElevenLabs (eleven_multilingual_v2). Returns a hosted audio URL. Costs 3 credits.\n\n" +
+    "Generate voiceover audio via Runway-routed ElevenLabs (eleven_v3). Returns a hosted audio URL. Costs 3 credits.\n\n" +
     "**Voice resolution priority:**\n" +
     "1. When the lead director has a custom voice configured (most films), THAT voice is used — pass nothing for voice_id and the tool auto-resolves.\n" +
     "2. Otherwise pass `voice_id` directly OR `voice_style` for catalog-based pick.\n\n" +

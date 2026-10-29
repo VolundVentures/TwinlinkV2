@@ -131,10 +131,10 @@ export const AdComposition: React.FC<AdCompositionProps> = ({
     // Lipsync clips: full volume
     if (clip.isLipsync) return 1.0;
 
-    // Regular clips with ambient audio: low ambient texture
-    // Duck further when voiceover is present
-    if (audio?.url) return 0.06;
-    return 0.15;
+    // Seedance scenes carry native dialogue / foley — they ARE the
+    // soundscape. Duck under narration, otherwise play near full.
+    if (audio?.url) return 0.5;
+    return 0.9;
   };
 
   return (

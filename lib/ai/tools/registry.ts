@@ -9,15 +9,13 @@ import { generateVoiceoverDefinition, generateVoiceoverTool } from "./generate-v
 import { composeVideoDefinition, composeVideoTool } from "./compose-video";
 import { generateMusicDefinition, generateMusicTool } from "./generate-music";
 import { generateAmbientDefinition, generateAmbientTool } from "./generate-ambient";
-import { extractFrameDefinition, extractFrameTool } from "./extract-frame";
 import { requestApprovalDefinition, requestApprovalTool } from "./request-approval";
 import { searchReferenceDefinition, searchReferenceTool } from "./search-reference";
 import { listAssetsDefinition, listAssetsTool } from "./list-assets";
-// AUTEUR (May 2026) — Aleph trio + teaching surface.
+// Seedance 2.5 video-to-video + 4K finish.
 import { generateCoverageDefinition, generateCoverageTool } from "./generate-coverage";
 import { applySignaturePassDefinition, applySignaturePassTool } from "./apply-signature-pass";
-import { applyDirectorNoteDefinition, applyDirectorNoteTool } from "./apply-director-note";
-import { citeLessonDefinition, citeLessonTool } from "./cite-lesson";
+import { finishFilmDefinition, finishFilmTool } from "./finish-film";
 import type { ToolDefinition, ToolHandler } from "./types";
 
 export const TOOL_REGISTRY: Record<string, { definition: ToolDefinition; handler: ToolHandler }> = {
@@ -32,22 +30,19 @@ export const TOOL_REGISTRY: Record<string, { definition: ToolDefinition; handler
   generate_music: { definition: generateMusicDefinition, handler: generateMusicTool },
   generate_ambient: { definition: generateAmbientDefinition, handler: generateAmbientTool },
   generate_voiceover: { definition: generateVoiceoverDefinition, handler: generateVoiceoverTool },
-  extract_frame: { definition: extractFrameDefinition, handler: extractFrameTool },
   compose_video: { definition: composeVideoDefinition, handler: composeVideoTool },
   search_reference: { definition: searchReferenceDefinition, handler: searchReferenceTool },
   list_assets: { definition: listAssetsDefinition, handler: listAssetsTool },
   request_approval: { definition: requestApprovalDefinition, handler: requestApprovalTool },
 
-  // ---- AUTEUR / Runway pipeline (May 2026) ----
-  // Aleph's three roles — coverage, signature, surgical edit
+  // ---- Seedance 2.5 video-to-video ----
   generate_coverage: { definition: generateCoverageDefinition, handler: generateCoverageTool },
   apply_signature_pass: {
     definition: applySignaturePassDefinition,
     handler: applySignaturePassTool,
   },
-  apply_director_note: { definition: applyDirectorNoteDefinition, handler: applyDirectorNoteTool },
-  // Teaching surface
-  cite_lesson: { definition: citeLessonDefinition, handler: citeLessonTool },
+  // ---- Finish ----
+  finish_film: { definition: finishFilmDefinition, handler: finishFilmTool },
 };
 
 export function getToolDefinitions(): ToolDefinition[] {

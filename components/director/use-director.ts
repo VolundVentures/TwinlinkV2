@@ -22,83 +22,6 @@ import type {
   WorkspaceState,
 } from "./director-types";
 
-export type LessonCard = {
-  id: string;
-  director_id: string;
-  film: string;
-  year?: number;
-  technique: string;
-  why: string;
-  asset_id?: string;
-  created_at: number;
-};
-
-export type ReferenceCard = {
-  id: string;
-  url: string;
-  caption: string;
-  director_id: string;
-  director_name: string;
-  created_at: number;
-};
-
-/**
- * A pending creative suggestion from a director, surfaced as a card with
- * Apply / Pass buttons. The user can confirm via click OR via verbal
- * approval to the director (which fires commit_proposal and routes to
- * applySuggestion). The user has the final word — the director never acts
- * unilaterally.
- */
-export type Suggestion =
-  | {
-      id: string;
-      type: "treatment";
-      director_id: string;
-      director_name: string;
-      summary: string;
-      brief: string;
-      status: "pending" | "applied" | "passed";
-      created_at: number;
-    }
-  | {
-      id: string;
-      type: "alternative";
-      director_id: string;
-      director_name: string;
-      summary: string;
-      target_ref: string;
-      direction: string;
-      status: "pending" | "applied" | "passed";
-      created_at: number;
-    }
-  | {
-      id: string;
-      type: "signature_pass";
-      director_id: string;
-      director_name: string;
-      summary: string;
-      target_ref: string;
-      status: "pending" | "applied" | "passed";
-      created_at: number;
-    }
-  | {
-      id: string;
-      type: "coverage";
-      director_id: string;
-      director_name: string;
-      summary: string;
-      target_ref: string;
-      direction: string;
-      status: "pending" | "applied" | "passed";
-      created_at: number;
-    };
-
-export type SuggestionInput =
-  | { type: "treatment"; brief: string; summary: string }
-  | { type: "alternative"; target_ref: string; direction: string; summary: string }
-  | { type: "signature_pass"; target_ref: string; summary: string }
-  | { type: "coverage"; target_ref: string; direction: string; summary: string };
-
 type Status = "idle" | "running" | "awaiting_approval" | "complete" | "error";
 
 function stageLabel(toolName: string): string {
@@ -113,12 +36,10 @@ function stageLabel(toolName: string): string {
     edit_video: "Editing the shot",
     generate_coverage: "Generating coverage",
     apply_signature_pass: "Applying the director's signature",
-    apply_director_note: "Applying the director's note",
     generate_music: "Scoring the film",
     generate_voiceover: "Recording voiceover",
-    extract_frame: "Extracting frame",
     compose_video: "Cutting the final film",
-    cite_lesson: "Citing a film",
+    finish_film: "Mastering at 4K",
     request_approval: "Presenting for approval",
   };
   return map[toolName] || "Working";
@@ -140,135 +61,9 @@ export function useDirector() {
   const [spec, setSpec] = useState<{ durationSeconds: number; aspectRatio: string } | null>(null);
   const [treatment, setTreatment] = useState<TreatmentData | null>(null);
   const [notifications, setNotifications] = useState<Array<{ id: string; message: string }>>([]);
-  // AUTEUR (May 2026) — director cast + collected teaching cards.
+  // Director cast — the lead's voice is the agent's chat voice.
   const [cast, setCast] = useState<{ lead: CastedDirector | null; co: CastedDirector | null }>(
     { lead: null, co: null }
-  );
-  const [lessons, setLessons] = useState<LessonCard[]>([]);
-  const [references, setReferences] = useState<ReferenceCard[]>([]);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  // Mirror suggestions in a ref so addSuggestion() can dedup against the
-  // current list without taking it as a useCallback dep (which would force a
-  // new reference every keystroke and break downstream effect deps).
-  const suggestionsRef = useRef<Suggestion[]>([]);
-  useEffect(() => {
-    suggestionsRef.current = suggestions;
-  }, [suggestions]);
-  // Persisted live-call transcript loaded on resume. Seeded into the active
-  // session's priorTranscript via director-shell so the director walks back
-  // in mid-conversation across page reloads.
-  const [storedTranscript, setStoredTranscript] = useState<
-    Array<{ speaker: "user" | "director"; text: string }>
-  >([]);
-  // Cache the user's pitch text so the avatar persona can be seeded with it
-  // at session creation. Stays in memory only; not persisted.
-  const [latestBrief, setLatestBrief] = useState<string | null>(null);
-
-  const addReference = useCallback((card: ReferenceCard) => {
-    setReferences((cur) => {
-      if (cur.some((c) => c.id === card.id)) return cur;
-      return [card, ...cur];
-    });
-  }, []);
-
-  const addLesson = useCallback((card: LessonCard) => {
-    setLessons((cur) => {
-      if (cur.some((c) => c.id === card.id)) return cur;
-      return [...cur, card];
-    });
-  }, []);
-
-  // Persist suggestions to agent_config.suggestions whenever they change so
-  // they survive resume / page reload. Debounced 500ms — many state changes
-  // can happen in quick succession (add → applied → directive sent), no need
-  // to hammer the DB.
-  const generationIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    generationIdRef.current = generationId;
-  }, [generationId]);
-  useEffect(() => {
-    const gid = generationIdRef.current;
-    if (!gid) return;
-    if (suggestions.length === 0) return;
-    const timer = setTimeout(() => {
-      fetch("/api/suggestions/persist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ generationId: gid, suggestions }),
-      }).catch((err) => console.warn("[suggestions/persist] failed:", err));
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [suggestions]);
-
-  /**
-   * Add a pending suggestion. Called when a director fires propose_X via the
-   * avatar SDK. The card lands in the Suggestions strip with Apply / Pass.
-   */
-  const addSuggestion = useCallback(
-    (
-      input: SuggestionInput,
-      director: { id: string; name: string }
-    ): Suggestion => {
-      // Dedup defense for `treatment`. The director sometimes re-fires
-      // propose_treatment while the writer is already running OR while a
-      // pending card is on screen. Persona prompt forbids it, but the LLM
-      // occasionally slips. Skip the add and return the existing card so the
-      // UI shows ONE treatment suggestion at a time.
-      if (input.type === "treatment") {
-        const existing = suggestionsRef.current.find(
-          (s) =>
-            s.type === "treatment" &&
-            (s.status === "pending" || s.status === "applied")
-        );
-        if (existing) {
-          console.warn(
-            "[addSuggestion] propose_treatment ignored — an existing treatment suggestion is already",
-            existing.status
-          );
-          return existing;
-        }
-      }
-      const base = {
-        id: crypto.randomUUID(),
-        director_id: director.id,
-        director_name: director.name,
-        summary: input.summary,
-        status: "pending" as const,
-        created_at: Date.now(),
-      };
-      let suggestion: Suggestion;
-      switch (input.type) {
-        case "treatment":
-          suggestion = { ...base, type: "treatment", brief: input.brief };
-          break;
-        case "alternative":
-          suggestion = {
-            ...base,
-            type: "alternative",
-            target_ref: input.target_ref,
-            direction: input.direction,
-          };
-          break;
-        case "signature_pass":
-          suggestion = {
-            ...base,
-            type: "signature_pass",
-            target_ref: input.target_ref,
-          };
-          break;
-        case "coverage":
-          suggestion = {
-            ...base,
-            type: "coverage",
-            target_ref: input.target_ref,
-            direction: input.direction,
-          };
-          break;
-      }
-      setSuggestions((cur) => [...cur, suggestion]);
-      return suggestion;
-    },
-    []
   );
 
   const pushNotification = useCallback((message: string) => {
@@ -680,17 +475,6 @@ export function useDirector() {
         setStatus("awaiting_approval");
         return;
       }
-      case "lesson_added": {
-        const card = data as LessonCard;
-        setLessons((cur) => {
-          // De-dupe by id in case the server re-emits.
-          if (cur.some((c) => c.id === card.id)) return cur;
-          return [...cur, card];
-        });
-        // Tiny toast acknowledging the lesson without competing with chat.
-        pushNotification(`+ Lesson · ${card.film}`);
-        return;
-      }
       case "complete": {
         // If we hit a checkpoint, status is already 'awaiting_approval'; don't override.
         setStatus((s) => (s === "awaiting_approval" ? s : finalFilm ? "complete" : "idle"));
@@ -758,10 +542,6 @@ export function useDirector() {
       setComposingNow(false);
       setActiveCheckpoint(null);
       setTreatment(null);
-      setLessons([]);
-      setReferences([]);
-      setSuggestions([]);
-      setLatestBrief(generation.prompt || null);
       historyRef.current = [];
       lastAgentMessageRef.current = "";
 
@@ -773,7 +553,7 @@ export function useDirector() {
       const dur = generation.duration_seconds || generation.metadata?.duration_seconds || 30;
       setSpec({ durationSeconds: dur, aspectRatio: aspect });
 
-      // AUTEUR: rehydrate director cast + lesson plan from agent_config (the
+      // Rehydrate director cast from agent_config (the
       // only jsonb column on generations — there is no `metadata` column).
       // The cast object is the lobby-safe view (no personality/inspiration);
       // we fetch the public director list to fill in name + portrait.
@@ -795,18 +575,6 @@ export function useDirector() {
           // Non-critical — cast just won't display.
         }
       }
-      const storedLessons = (cfg.lesson_plan as LessonCard[] | undefined) || [];
-      if (storedLessons.length > 0) setLessons(storedLessons);
-      const storedRefs = (cfg.whiteboard_images as ReferenceCard[] | undefined) || [];
-      if (storedRefs.length > 0) setReferences(storedRefs);
-      const storedSuggestions = (cfg.suggestions as Suggestion[] | undefined) || [];
-      if (storedSuggestions.length > 0) setSuggestions(storedSuggestions);
-      const storedTranscript =
-        (cfg.live_transcript as Array<{
-          speaker: "user" | "director";
-          text: string;
-        }> | undefined) || [];
-      if (storedTranscript.length > 0) setStoredTranscript(storedTranscript);
 
       // Hydrate plates / keyframes / shots / final from stored assets
       const assets = (generation.generation_assets || []) as Array<{
@@ -1036,10 +804,6 @@ export function useDirector() {
       setGenerationId(null);
       setSessionId(null);
       setTreatment(null);
-      setLessons([]);
-      setReferences([]);
-      setSuggestions([]);
-      setLatestBrief(input.prompt);
       historyRef.current = [];
       lastAgentMessageRef.current = "";
       setSpec({ durationSeconds: input.durationSeconds, aspectRatio: input.aspectRatio });
@@ -1136,110 +900,6 @@ export function useDirector() {
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [generationId, appendMessage, spec]
-  );
-
-  /**
-   * Resolve a suggestion target — either by exact id, OR by latest-pending
-   * from a given director. The director's `commit_proposal` may not always
-   * carry the right id (verbal flow), so we fall back to the most recent
-   * pending suggestion from that director.
-   */
-  function resolvePending(
-    suggestionId?: string,
-    directorId?: string
-  ): Suggestion | null {
-    let pending = suggestions.filter((s) => s.status === "pending");
-    if (suggestionId) {
-      const exact = pending.find((s) => s.id === suggestionId);
-      if (exact) return exact;
-    }
-    if (directorId) pending = pending.filter((s) => s.director_id === directorId);
-    if (pending.length === 0) return null;
-    return pending[pending.length - 1]; // most recent
-  }
-
-  /** Build the agent directive for an applied suggestion. */
-  function buildApplyDirective(s: Suggestion): string {
-    switch (s.type) {
-      case "treatment":
-        return [
-          `The user just approved ${s.director_name}'s proposal to write the treatment.`,
-          `Use this brief verbatim:`,
-          `"""`,
-          s.brief,
-          `"""`,
-          `Call write_script NOW with this brief and the user's film spec. Do not ask follow-up questions; the directors and the user have already discussed.`,
-        ].join("\n");
-      case "alternative": {
-        const isShot = /^shot_/i.test(s.target_ref);
-        const isTag = s.target_ref.startsWith("@");
-        if (isShot) {
-          return [
-            `The user just approved ${s.director_name}'s suggestion: change ${s.target_ref}.`,
-            `Action: call edit_video(shot_id="${s.target_ref}", source_shot_tag="${s.target_ref}", edit_instruction="${s.direction.replace(/"/g, '\\"')}").`,
-            `Then immediately call request_approval(stage="shots") with the full updated items list. Do not ask for confirmation.`,
-          ].join("\n");
-        }
-        const tag = isTag ? s.target_ref.slice(1) : s.target_ref;
-        return [
-          `The user just approved ${s.director_name}'s suggestion: change @${tag}.`,
-          `Action: call edit_plate(target_tag="${tag}", edit_instruction="${s.direction.replace(/"/g, '\\"')}").`,
-          `Then immediately call request_approval for the relevant stage (plates or keyframes — pick the right one based on what @${tag} is) with the full updated items list. Do not ask for confirmation.`,
-        ].join("\n");
-      }
-      case "signature_pass":
-        return [
-          `The user approved ${s.director_name}'s signature pass on ${s.target_ref}.`,
-          `Look up the asset id for ${s.target_ref} via list_assets if needed.`,
-          `Then call apply_signature_pass(target_asset_id="<that id>", director_id="${s.director_id}", signature_prompt="<one of ${s.director_name}'s alephSignaturePrompts from the DIRECTORS section in your context>").`,
-          `Then immediately call request_approval(stage="shots") with the updated list.`,
-        ].join("\n");
-      case "coverage":
-        return [
-          `The user approved ${s.director_name}'s coverage suggestion on ${s.target_ref}.`,
-          `Action: call generate_coverage(master_shot_id="${s.target_ref}", angle_label="${s.summary.slice(0, 40)}", angle_prompt="${s.direction.replace(/"/g, '\\"')}").`,
-          `Then call request_approval(stage="shots") with the updated list.`,
-        ].join("\n");
-    }
-  }
-
-  const applySuggestion = useCallback(
-    async (suggestionId?: string, directorId?: string) => {
-      const target = resolvePending(suggestionId, directorId);
-      if (!target) {
-        // Already applied / passed (e.g. user clicked Apply, then said
-        // "go ahead" — director fires commit_proposal with the same id but
-        // it's no longer pending). Benign; no warning.
-        return;
-      }
-      // Mark applied immediately so the UI updates
-      setSuggestions((cur) =>
-        cur.map((s) =>
-          s.id === target.id ? { ...s, status: "applied" as const } : s
-        )
-      );
-      const directive = buildApplyDirective(target);
-      const summary = target.summary || `Applied: ${target.type}`;
-      await sendInternalDirective(directive, summary);
-    },
-    // resolvePending + buildApplyDirective close over `suggestions` via the
-    // hook's own closure; we re-create applySuggestion when those change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [suggestions, sendInternalDirective]
-  );
-
-  const passSuggestion = useCallback(
-    (suggestionId?: string, directorId?: string) => {
-      const target = resolvePending(suggestionId, directorId);
-      if (!target) return;
-      setSuggestions((cur) =>
-        cur.map((s) =>
-          s.id === target.id ? { ...s, status: "passed" as const } : s
-        )
-      );
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [suggestions]
   );
 
   /**
@@ -1350,16 +1010,6 @@ export function useDirector() {
     pushNotification,
     cast,
     setCast,
-    lessons,
-    addLesson,
-    references,
-    addReference,
-    storedTranscript,
-    suggestions,
-    addSuggestion,
-    applySuggestion,
-    passSuggestion,
-    latestBrief,
     startBrief,
     resumeGeneration,
     sendFollowup,

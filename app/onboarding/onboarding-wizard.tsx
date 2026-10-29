@@ -40,7 +40,7 @@ const ROOMS = [
   {
     n: "01",
     label: "Cast",
-    hint: "Pick one or two of twenty fictional auteurs. They direct with you live.",
+    hint: "Pick one or two of twenty fictional auteurs. Their school shapes every frame.",
     image: "/method/01-casting.png",
   },
   {
@@ -87,10 +87,9 @@ export function OnboardingWizard({ orgId, userId }: { orgId: string; userId: str
           You direct.
         </h1>
         <p className="mt-8 max-w-2xl font-serif text-[19px] leading-[1.7] text-neutral-700">
-          AUTEUR is a virtual film studio. Cast a fictional auteur — twenty schools of
-          cinema, twenty voices — and they co-direct your film with you in real time.
-          From the pitch to the premiere, their craft is in every frame, and every
-          decision becomes a lesson you keep.
+          TwinLink Director is a virtual film studio. Cast a fictional auteur — twenty
+          schools of cinema — brief them, and approve each stage: treatment, plates,
+          keyframes, 25-second scenes with native sound, the cut, the 4K master.
         </p>
 
         <div className="mt-10 flex flex-wrap items-center gap-3">
@@ -192,57 +191,6 @@ export function OnboardingWizard({ orgId, userId }: { orgId: string; userId: str
         </div>
       </section>
 
-      {/* ── Film school teaser ─────────────────────────────────────────── */}
-      <section className="border-t border-neutral-200 pt-12">
-        <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-12 items-start">
-          <div>
-            <p className="font-mono text-[12px] uppercase tracking-[0.24em] text-neutral-500">
-              Film school, included
-            </p>
-            <h2 className="mt-5 font-serif text-[44px] leading-[1.05] tracking-tight text-neutral-900">
-              Every decision
-              <br />
-              is a lesson.
-            </h2>
-            <p className="mt-6 max-w-xl font-serif text-[17px] leading-[1.75] text-neutral-700">
-              As your director makes a call — a lens, a hold, an eye-line, a grade —
-              they cite the real film and the real technique it comes from. Each citation
-              lands in your Film School sidebar with a rendered textbook reference page.
-              When the film is locked, the lessons travel with you in the dossier as a
-              printable plan.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-2">
-              {[
-                "Goodfellas — long Steadicam tracking",
-                "In the Mood for Love — magenta highlights",
-                "Stalker — long contemplative takes",
-                "Persona — micro-expression close-ups",
-              ].map((tag) => (
-                <span
-                  key={tag}
-                  className="border border-neutral-300 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-neutral-600"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/directors/yuki-sato.png"
-              alt="Yuki Sato"
-              className="aspect-[3/4] w-full object-cover grayscale"
-            />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/directors/aleksandra-volkov.png"
-              alt="Aleksandra Volkov"
-              className="aspect-[3/4] w-full object-cover grayscale mt-10"
-            />
-          </div>
-        </div>
-      </section>
 
       {/* ── Closing CTA ────────────────────────────────────────────────── */}
       <section className="border-t border-neutral-900 pt-10 pb-4">

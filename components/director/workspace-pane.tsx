@@ -15,7 +15,6 @@ import type {
   TreatmentData,
   WorkspaceState,
 } from "./director-types";
-import type { ReferenceCard } from "./use-director";
 
 // Plate kind display labels
 const PLATE_KIND_LABEL: Record<PlateKind, string> = {
@@ -87,7 +86,6 @@ export function WorkspacePane({
   onContinueGenerating,
   onAssetClick,
   expectedCounts,
-  references,
   generationId,
 }: {
   workspace: WorkspaceState;
@@ -96,8 +94,6 @@ export function WorkspacePane({
   onRespondToCheckpoint: (edits: Record<string, string>, note?: string) => void;
   onContinueGenerating?: (stage: "keyframes" | "shots") => void;
   expectedCounts?: { keyframes: number; shots: number };
-  /** Director-fired teaching references (whiteboard images). Rendered above production. */
-  references?: ReferenceCard[];
   /** Project id — needed for the Production Dossier download in PREMIERE. */
   generationId?: string | null;
   onAssetClick: (asset: {
@@ -111,9 +107,6 @@ export function WorkspacePane({
   // before generation started) and the user explicitly asked to remove it.
   return (
     <div className="flex h-full flex-col overflow-hidden bg-neutral-50">
-      {references && references.length > 0 && (
-        <ReferencesLane references={references} />
-      )}
       <div className="min-h-0 flex-1 overflow-hidden">
         {workspace.kind === "welcome" && (
           <div className="h-full overflow-y-auto">
@@ -1333,93 +1326,9 @@ function FinalView({
 }
 
 /**
- * ReferencesLane — horizontal scrollable strip showing teaching examples
- * conjured by the directors (gpt_image_2 via the whiteboard tool). Sits
- * above production lanes; never mixes with plates/keyframes/shots.
- */
-function ReferencesLane({ references }: { references: ReferenceCard[] }) {
-  const [expanded, setExpanded] = useState(true);
-  const [openCard, setOpenCard] = useState<ReferenceCard | null>(null);
-  // Track the latest reference id so we can flag it with NEW + a brief
-  // pulse animation. The director's persona is now told to point the user
-  // at this card when they fire cite_lesson; the visual emphasis makes
-  // sure the page actually catches the eye.
-  const newestId = references[references.length - 1]?.id;
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-  // Auto-scroll the newest card into view whenever one lands.
-  useEffect(() => {
-    if (!scrollerRef.current) return;
-    scrollerRef.current.scrollLeft = scrollerRef.current.scrollWidth;
-  }, [references.length]);
-  return (
-    <div className="border-b border-neutral-200 bg-white">
-      <button
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between px-5 py-2 hover:bg-neutral-50"
-      >
-        <p className="font-mono text-[12px] uppercase tracking-[0.18em] text-neutral-500">
-          Film school references · {references.length}
-        </p>
-        <span className="font-mono text-[12px] uppercase tracking-[0.18em] text-neutral-400">
-          {expanded ? "hide" : "show"}
-        </span>
-      </button>
-      {expanded && (
-        <div
-          ref={scrollerRef}
-          className="overflow-x-auto border-t border-neutral-100 px-5 pb-4 pt-3"
-        >
-          <div className="flex gap-4">
-            {references.map((r) => {
-              const isNewest = r.id === newestId;
-              return (
-                <button
-                  type="button"
-                  key={r.id}
-                  onClick={() => setOpenCard(r)}
-                  className={`group relative flex w-[280px] shrink-0 flex-col text-left transition-transform duration-300 ${
-                    isNewest ? "ring-1 ring-black/80" : ""
-                  }`}
-                  title="Click to view full size"
-                >
-                  {isNewest && (
-                    <span className="absolute right-1 top-1 z-10 bg-black px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-white">
-                      new
-                    </span>
-                  )}
-                  <div className="aspect-video overflow-hidden border border-neutral-200 bg-neutral-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={r.url}
-                      alt={r.caption}
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                    />
-                  </div>
-                  <figcaption className="mt-2 line-clamp-2 font-serif text-[13px] leading-snug text-neutral-800">
-                    {r.caption}
-                  </figcaption>
-                  <p className="mt-1 truncate font-mono text-[12px] uppercase tracking-[0.18em] text-neutral-400">
-                    via {r.director_name}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Full-size modal — click outside or press Esc to close */}
-      {openCard && (
-        <ReferenceModal card={openCard} onClose={() => setOpenCard(null)} />
-      )}
-    </div>
-  );
-}
-
-/**
  * DossierDownloadButtons — fetches the Production Dossier manifest from
  * /api/dossier/[generationId] and exposes individual download buttons for
- * each artifact: treatment.md, lesson_plan.md, directors_notes.md,
+ * each artifact: treatment.md, directors_notes.md,
  * shot_list.csv, project.json. Each is generated client-side from the
  * manifest as a Blob and offered via an <a download> trick.
  *
@@ -1460,11 +1369,6 @@ function DossierDownloadButtons({ generationId }: { generationId: string }) {
         "text/markdown"
       );
       triggerDownload(
-        `${slug}-lesson-plan-${stamp}.md`,
-        data.lesson_plan_md,
-        "text/markdown"
-      );
-      triggerDownload(
         `${slug}-directors-notes-${stamp}.md`,
         data.directors_notes_md,
         "text/markdown"
@@ -1497,57 +1401,6 @@ function DossierDownloadButtons({ generationId }: { generationId: string }) {
           {error}
         </p>
       )}
-    </div>
-  );
-}
-
-function ReferenceModal({
-  card,
-  onClose,
-}: {
-  card: ReferenceCard;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
-      onClick={onClose}
-    >
-      <div
-        className="relative max-h-[90vh] w-full max-w-4xl overflow-y-auto bg-white"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute right-3 top-3 z-10 border border-neutral-300 bg-white px-2.5 py-1 font-mono text-[12px] uppercase tracking-[0.18em] text-neutral-700 hover:border-neutral-900 hover:text-neutral-900"
-        >
-          Close · esc
-        </button>
-        <div className="bg-neutral-50">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={card.url}
-            alt={card.caption}
-            className="block w-full"
-          />
-        </div>
-        <div className="border-t border-neutral-200 bg-white px-6 py-4">
-          <p className="font-mono text-[12px] uppercase tracking-[0.18em] text-neutral-500">
-            via {card.director_name}
-          </p>
-          <p className="mt-2 font-serif text-[16px] leading-snug text-neutral-900">
-            {card.caption}
-          </p>
-        </div>
-      </div>
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import {
   streamWithTools,
+  DEFAULT_AGENT_MODEL,
   type AnthropicMessage,
   type ContentBlock,
   type ToolUseBlock,
-} from "@/lib/ai/claude";
+} from "@/lib/ai/llm";
 import type {
   AgentContext,
   ToolResult,
@@ -34,8 +35,8 @@ const ASSET_PRODUCING_TOOLS = new Set([
   "edit_video",
   "generate_coverage",
   "apply_signature_pass",
-  "apply_director_note",
   "compose_video",
+  "finish_film",
 ]);
 
 /** Infer which stage a given tool's output belongs to. */
@@ -46,11 +47,10 @@ function stageForTool(name: string): "plates" | "keyframes" | "shots" | "final_c
     name === "generate_video" ||
     name === "edit_video" ||
     name === "generate_coverage" ||
-    name === "apply_signature_pass" ||
-    name === "apply_director_note"
+    name === "apply_signature_pass"
   )
     return "shots";
-  if (name === "compose_video") return "final_cut";
+  if (name === "compose_video" || name === "finish_film") return "final_cut";
   return null;
 }
 
@@ -203,7 +203,7 @@ export async function runAgentLoop(
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     // Client disconnected / user clicked Stop — bail out immediately so we
-    // stop paying for Claude turns and stop launching new Replicate jobs.
+    // stop paying for Claude turns and stop launching new Runway tasks.
     if (context.signal?.aborted) {
       console.log(`[agent-loop] aborted before turn ${turn + 1} — exiting loop`);
       break;
@@ -227,7 +227,7 @@ export async function runAgentLoop(
       stopReason = result.stopReason;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error("[agent-loop] Claude API error:", errMsg);
+      console.error("[agent-loop] LLM API error:", errMsg);
       emitter.send("error", { message: `AI error: ${errMsg}` });
       break;
     }
@@ -482,16 +482,10 @@ async function collectStreamResponse(
   let currentText = "";
 
   const stream = streamWithTools({
-    // Sonnet 4.6 runs the director agent loop. We tried Haiku 4.5 for speed
-    // but Haiku jumps ahead in the asset chain — observed firing 3×
-    // generate_video calls in parallel BEFORE any keyframe existed,
-    // then back-filling keyframes a turn later. Sonnet respects the
-    // hard dependency order (plates → keyframes → shots → compose) and
-    // keeps to one stage per turn. Treatment generation stays on Haiku
-    // (it's a single structured-JSON pass with no ordering risk).
-    // Override with AGENT_MODEL=claude-haiku-4-5 to retry Haiku with
-    // a stronger system prompt later.
-    model: process.env.AGENT_MODEL || "claude-sonnet-4-6",
+    // gpt-6-sol runs the director agent loop — respects the hard dependency
+    // order (plates → keyframes → scenes → compose) at $2/$10 per MTok.
+    // Override with AGENT_MODEL.
+    model: process.env.AGENT_MODEL || DEFAULT_AGENT_MODEL,
     system: systemBlocks,
     messages,
     tools,

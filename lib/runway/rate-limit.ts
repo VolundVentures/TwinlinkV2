@@ -1,9 +1,9 @@
 // Concurrency limiter for Runway task creation.
 //
-// Runway, like Replicate, rate-limits task creation. The agent loop can fan
+// Runway rate-limits task creation. The agent loop can fan
 // out many parallel calls (e.g. generate 5 character bibles + 3 scene
 // storyboards simultaneously) — without a gate this trips 429s. We mirror the
-// replicate.ts pattern: a small promise pool that lets up to N tasks be
+// pattern: a small promise pool that lets up to N tasks be
 // inflight at once, queueing the rest.
 //
 // Default 5: matches Runway tier-3 limits (May 2026). Override via env if the

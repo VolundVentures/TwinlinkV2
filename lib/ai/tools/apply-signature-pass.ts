@@ -1,35 +1,30 @@
-// apply_signature_pass — apply a director's visual signature via Aleph.
+// apply_signature_pass — imprint a director's grade on a rendered scene.
 //
-// Each director persona has 3-5 signature Aleph prompts in their JSON
-// (alephSignaturePrompts) — color/grade/lighting fingerprint phrases.
-// This tool runs one of those prompts on a target video as a 5s pass to
-// imprint authorial style.
-//
-// Used per-shot in the production phase (after master + coverage), and
-// optionally on a final assembled cut as a film-wide grade.
+// Seedance 2.5 video-to-video in `edit` mode: the scene is modified in place
+// (same length, same action, native audio kept) per one of the persona's
+// signature prompts — color / grade / lighting / atmosphere fingerprint.
 
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber, formatDbError } from "./types";
-import { alephSignaturePass, toRunwayRatio } from "@/lib/runway";
+import { seedanceVideoToVideo } from "@/lib/runway";
 import { db } from "@/lib/db";
 import { persistAsset } from "@/lib/generation/persist-asset";
 
 export const applySignaturePassDefinition: ToolDefinition = {
   name: "apply_signature_pass",
   description:
-    "Apply a director's signature pass via Aleph (5s). Imprints the director's visual fingerprint — color/grade/lighting/atmosphere — on a target video.\n\n" +
-    "Use one of the director persona's `alephSignaturePrompts` strings as the prompt. The persona system loads these per-director; this tool only runs one prompt per call.\n\n" +
-    "Costs 12 credits.",
+    "Apply the director's signature grade to a rendered scene via Seedance 2.5 (in-place edit). Imprints the director's visual fingerprint — color / grade / lighting / atmosphere — while preserving action, framing and native audio.\n\n" +
+    "Use one of the director persona's signature prompt strings verbatim (they're listed in the DIRECTORS section). One prompt per call. Run on the master and each coverage variant for a coherent film-wide grade.\n\n" +
+    "Costs ≈ scene length × 45 cr/s.",
   input_schema: {
     type: "object",
     properties: {
-      target_asset_id: { type: "string", description: "DB asset ID of the video to pass." },
+      target_asset_id: { type: "string", description: "DB asset ID of the scene to grade." },
       director_id: { type: "string", description: "Director persona ID (e.g. 'marcel-vrai')." },
       signature_prompt: {
         type: "string",
-        description: "The Aleph instruction. Pulled from the director persona's signature prompts.",
+        description: "The grade instruction — pulled verbatim from the director persona's signature prompts.",
       },
-      aspect_ratio: { type: "string" },
     },
     required: ["target_asset_id", "director_id", "signature_prompt"],
   },
@@ -43,7 +38,6 @@ export const applySignaturePassTool: ToolHandler = async (
   const targetId = input.target_asset_id as string;
   const directorId = input.director_id as string;
   const signaturePrompt = input.signature_prompt as string;
-  const aspectRatio = (input.aspect_ratio as string) || context.aspectRatio || "16:9";
 
   if (!targetId || !directorId || !signaturePrompt) {
     return { success: false, content: "target_asset_id, director_id, signature_prompt required." };
@@ -51,13 +45,16 @@ export const applySignaturePassTool: ToolHandler = async (
 
   const { data: target } = await db
     .from("generation_assets")
-    .select("id, public_url, aspect_ratio, metadata")
+    .select("id, public_url, aspect_ratio, metadata, duration_seconds")
     .eq("id", targetId)
     .single();
 
   if (!target?.public_url) {
     return { success: false, content: `Target asset ${targetId} not found.` };
   }
+  const targetMeta = (target.metadata as Record<string, unknown> | null) || {};
+  const duration =
+    (target.duration_seconds as number | null) || (targetMeta.duration as number | undefined) || 25;
 
   emitter.send("tool_progress", {
     tool: "apply_signature_pass",
@@ -67,10 +64,11 @@ export const applySignaturePassTool: ToolHandler = async (
   });
 
   try {
-    const taskResult = await alephSignaturePass({
-      videoUri: target.public_url,
-      signaturePrompt,
-      ratio: toRunwayRatio(target.aspect_ratio || aspectRatio),
+    const taskResult = await seedanceVideoToVideo({
+      promptVideo: target.public_url,
+      sourceDurationSeconds: duration,
+      mode: "edit",
+      promptText: `${signaturePrompt} Preserve the action, framing, performances and sound exactly — change only the look.`,
       generationId: context.generationId,
       description: `${directorId} signature pass on ${targetId}`,
     });
@@ -93,16 +91,18 @@ export const applySignaturePassTool: ToolHandler = async (
         generation_id: context.generationId,
         org_id: context.orgId,
         type: "video",
-        aspect_ratio: target.aspect_ratio || aspectRatio,
+        aspect_ratio: target.aspect_ratio || context.aspectRatio || "16:9",
         public_url: persistentUrl,
         storage_path: persistentUrl,
-        duration_seconds: 5,
+        duration_seconds: duration,
         prediction_id: taskResult.taskId,
         status: "ready",
         parent_asset_id: target.id,
         metadata: {
-          ...((target.metadata as Record<string, unknown>) || {}),
+          ...targetMeta,
           shot_role: "signature_pass",
+          model: "seedance2_5",
+          mode: "seedance_edit",
           director_id: directorId,
           signature_prompt: signaturePrompt,
           parent_asset_id: target.id,

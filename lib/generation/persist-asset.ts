@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 
 /**
- * Mirror a Replicate (or other ephemeral) URL to Supabase Storage so the
+ * Mirror a Runway (or other ephemeral) URL to Supabase Storage so the
  * asset survives after the provider's delivery URL expires (~24h for
  * replicate.delivery).
  *

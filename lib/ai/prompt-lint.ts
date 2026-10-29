@@ -1,12 +1,13 @@
 /**
- * Prompt linter — enforces the Higgsfield mechanical video prompt style.
+ * Scene-direction linter for Seedance 2.5 prompts.
  *
- * Cannes-tier video prompts are ≤25 words: [camera rule] + [motion verb] + [what stays still].
- * The keyframe carries composition, lighting, framing. The video prompt only describes motion.
+ * A scene is 25 seconds with native audio, so the prompt is no longer a
+ * 25-word motion tag — it is a short shooting script: camera rule, 2–4
+ * timed beats, any dialogue in quotes, sound cues. Hard cap 220 words so
+ * the agent still writes direction rather than prose.
  *
- * When a shot prompt fails the lint, the tool layer returns `success: false`
- * with a coaching message so the agent self-corrects in the same turn —
- * we never silently rewrite (the agent has to learn the format).
+ * When a prompt fails lint, the tool returns `success: false` with a
+ * coaching message so the agent self-corrects in the same turn.
  */
 
 const FORBIDDEN_ADJECTIVES = [
@@ -25,7 +26,6 @@ const FORBIDDEN_ADJECTIVES = [
   "4k",
   "masterpiece",
   "award-winning",
-  "cinematic masterpiece",
   "hyperrealistic",
 ];
 
@@ -47,6 +47,7 @@ const CAMERA_RULE_KEYWORDS = [
   "aerial",
   "whip",
   "rack focus",
+  "steadicam",
 ];
 
 export type VideoPromptLintResult = {
@@ -55,7 +56,7 @@ export type VideoPromptLintResult = {
   wordCount: number;
 };
 
-const WORD_LIMIT = 30; // hard cap — target is 25
+const WORD_LIMIT = 220;
 
 export function lintVideoPrompt(prompt: string): VideoPromptLintResult {
   const words = prompt.trim().split(/\s+/).filter(Boolean);
@@ -64,7 +65,7 @@ export function lintVideoPrompt(prompt: string): VideoPromptLintResult {
 
   if (words.length > WORD_LIMIT) {
     warnings.push(
-      `Video prompt is ${words.length} words — compress to ≤25. The keyframe carries composition; the prompt only describes motion. Example: "static camera. orlando turns head to mirror, gaze lingers."`
+      `Scene direction is ${words.length} words — cap is ${WORD_LIMIT}. Write beats, not prose: "[camera rule]. 0-8s: … 8-18s: … 18-25s: …". Dialogue in quotes, sound cues in brackets.`
     );
   }
 
@@ -74,7 +75,7 @@ export function lintVideoPrompt(prompt: string): VideoPromptLintResult {
   });
   if (foundForbidden.length > 0) {
     warnings.push(
-      `Forbidden adjectives: ${foundForbidden.join(", ")}. Describe motion and camera rule only. The keyframe already carries the cinematic quality — don't restate it in the prompt.`
+      `Forbidden adjectives: ${foundForbidden.join(", ")}. Describe camera, action, dialogue and sound — the keyframe already carries the look.`
     );
   }
 
@@ -84,7 +85,7 @@ export function lintVideoPrompt(prompt: string): VideoPromptLintResult {
   });
   if (!hasCameraRule) {
     warnings.push(
-      `No camera rule found. Start with one of: static camera, locked off, handheld, slow dolly in, push in, pull back, pan left/right, tracking, rack focus, pov.`
+      `No camera rule found. Open with one of: static camera, locked off, handheld, slow dolly in, push in, pull back, pan left/right, tracking, steadicam, rack focus, pov.`
     );
   }
 

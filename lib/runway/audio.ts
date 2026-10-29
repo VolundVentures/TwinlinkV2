@@ -1,12 +1,11 @@
-// ElevenLabs models surfaced via Runway.
+// Post-production audio via Runway.
 //
-// Used for the post-production audio stack:
-//   - Voice locks + dialogue (eleven_multilingual_v2)
-//   - Ambient beds (eleven_text_to_sound_v2 — per scene/location)
-//   - Diegetic SFX (eleven_text_to_sound_v2 — per beat)
+//   - Voiceover      → eleven_v3 (expressive TTS with [whispers]/[laughs] tags)
+//   - Ambient / SFX  → eleven_text_to_sound_v2 (per scene/location)
+//   - Score          → seed_audio (text-to-audio: music from a scene brief)
 //
-// The Suno score layer goes through the existing TwinLink integration in
-// lib/generation/music.ts, NOT through Runway.
+// Scenes rendered by Seedance 2.5 already carry native dialogue + foley; these
+// layers sit on top in the Remotion mix.
 
 import { trackCost } from "../generation/cost-tracker";
 import { getRunwayClient } from "./client";
@@ -30,7 +29,14 @@ export const RUNWAY_TTS_PRESETS = [
 export type RunwayTtsPreset = (typeof RUNWAY_TTS_PRESETS)[number];
 
 export type TextToSpeechInput = {
+  /** Script. eleven_v3 honours inline tags like [whispers], [sighs], [laughs]. */
   text: string;
+  /** 0–1. Lower = broader emotional range. Default 0.4 for narration. */
+  stability?: number;
+  /** 0.7–1.2 speed multiplier. */
+  speed?: number;
+  /** ISO 639-1 code to lock pronunciation (e.g. "ar", "fr"). */
+  languageCode?: string;
   /**
    * Runway preset voice name (e.g. "Vincent", "Rachel"). Case-insensitive
    * match against `RUNWAY_TTS_PRESETS`. The previous implementation accepted
@@ -64,17 +70,21 @@ export async function textToSpeech(
     const client = getRunwayClient();
     const preset = resolvePresetVoice(input.voiceId);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const task = await (client as any).textToSpeech
-      .create({
-        model: RUNWAY_MODELS.ELEVEN_TTS,
-        promptText: input.text,
-        voice: { presetId: preset, type: "runway-preset" },
-      })
-      .waitForTaskOutput();
+    const params: Record<string, unknown> = {
+      model: RUNWAY_MODELS.ELEVEN_TTS,
+      promptText: input.text,
+      voice: { presetId: preset, type: "runway-preset" },
+      stability: input.stability ?? 0.4,
+      useSpeakerBoost: true,
+    };
+    if (input.speed) params.speed = input.speed;
+    if (input.languageCode) params.languageCode = input.languageCode;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const task = await (client as any).textToSpeech.create(params).waitForTaskOutput();
     if (input.generationId) {
       trackCost(
         input.generationId,
-        "runway/eleven_multilingual_v2",
+        "runway/eleven_v3",
         input.text.length,
         input.description
       );
@@ -100,12 +110,7 @@ export async function textToSound(
 ): Promise<RunwayTaskResult<string[]>> {
   return withSlot(async () => {
     const client = getRunwayClient();
-    // Wrong SDK shape until 2026-05-12: was using `textToSpeech.create()` with
-    // `text` and `durationSeconds`. Runway's SDK exposes text-to-sound on a
-    // SEPARATE resource (`soundEffect`) with `promptText` and `duration` —
-    // the speech-shaped call returned a server-side validation error and the
-    // agent kept retrying. SDK type: SoundEffectCreateParams in
-    // @runwayml/sdk/resources/sound-effect.
+    // Text-to-sound lives on the `soundEffect` resource (promptText + duration).
     const params: Record<string, unknown> = {
       model: RUNWAY_MODELS.ELEVEN_SOUND,
       promptText: input.text,
@@ -120,6 +125,40 @@ export async function textToSound(
         input.durationSeconds ?? 5,
         input.description
       );
+    }
+    return { taskId: task.id, output: task.output };
+  });
+}
+
+export type GenerateScoreInput = {
+  /** Music brief — genre refs, bpm, key, instruments, arc, mood. */
+  promptText: string;
+  /** Target length — stated in the prompt; seed_audio has no duration param. */
+  durationSeconds: number;
+  generationId: string;
+  description: string;
+};
+
+/**
+ * Score via seed_audio (text-to-audio). Returns a wav/mp3 URL. seed_audio
+ * takes a scene description rather than a duration, so we state the length
+ * inside the prompt and let compose_video trim / loop.
+ */
+export async function generateScore(
+  input: GenerateScoreInput
+): Promise<RunwayTaskResult<string[]>> {
+  return withSlot(async () => {
+    const client = getRunwayClient();
+    const params: Record<string, unknown> = {
+      model: RUNWAY_MODELS.SEED_AUDIO,
+      promptText: `Instrumental film score, ${input.durationSeconds} seconds long, no vocals, starts immediately with no silence. ${input.promptText}`,
+      outputFormat: "mp3",
+      sampleRate: 44100,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const task = await (client as any).soundEffect.create(params).waitForTaskOutput();
+    if (input.generationId) {
+      trackCost(input.generationId, "runway/seed_audio", input.durationSeconds, input.description);
     }
     return { taskId: task.id, output: task.output };
   });

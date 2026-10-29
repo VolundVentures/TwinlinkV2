@@ -71,7 +71,7 @@ export type ProjectState = {
     mode?: string;
     duration?: number;
     aspect?: string;
-    /** The LLM-authored motion description that was sent to Gen-4.5 (pre-augmentation). */
+    /** The LLM-authored scene direction that was sent to Seedance 2.5 (pre-augmentation). */
     motionPrompt?: string;
     /** The keyframe this shot animates — lets the director cross-reference. */
     keyframeTag?: string;

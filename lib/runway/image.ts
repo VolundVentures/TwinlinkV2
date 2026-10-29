@@ -1,13 +1,14 @@
-// gpt_image_2 + gen4_image wrappers.
+// GPT Image 2.5 wrappers (gpt_image_2_5_sunburst / gpt_image_2_5_flare).
 //
 // Two responsibilities:
-//   1. Text-to-image generation with optional reference images (character bibles,
-//      storyboards, location plates, lookbook tiles).
-//   2. Edit-with-input-images — pass an existing image as `input_images` plus
-//      an instruction to alter it (port of TwinLink's edit_plate). gpt_image_2
-//      supports an optional alpha mask: transparent regions = edit zone.
+//   1. Text-to-image generation with optional reference images (character
+//      sheets, location plates, lookbook tiles). Up to 16 tagged refs.
+//   2. Edit-with-input-images — pass existing images as references plus an
+//      instruction to alter them (edit_plate / generate_keyframe).
 //
-// Resolutions: WIDTHxHEIGHT, both divisible by 16, ratio 1:3 to 3:1.
+// Sunburst = quality (default for plates + keyframes). Flare = fast, GPT
+// Image 2 quality — use for lookbook tiles and drafts.
+// Ratios: 30 width:height pairs across 1K / 2K / 4K — see ratio-map.ts.
 
 import { trackCost } from "../generation/cost-tracker";
 import { getRunwayClient } from "./client";
@@ -60,31 +61,29 @@ async function withThrottleRetry<T = any>(
 export type ImageGenerateInput = {
   /** Free-text prompt. Reference images can be addressed by `@tag`. */
   promptText: string;
-  /** Optional reference images. gpt_image_2: up to 10. gen4_image: up to 3. */
+  /** Optional reference images. Up to 16, optionally tagged. */
   references?: ReferenceImage[];
   /**
-   * Aspect ratio as a Runway pixel-pair string. Note: gpt_image_2 has a
-   * different valid ratio enum than video models (minimum 1920px on short
-   * side). Use `toGptImage2Ratio()` from `lib/runway/ratio-map.ts` to map
-   * a TwinLink aspect ratio (16:9, 1:1, etc.) to a gpt_image_2-legal pair.
+   * Aspect ratio as a Runway pixel-pair string. Use `toGptImageRatio()` from
+   * `lib/runway/ratio-map.ts` to map a TwinLink aspect (16:9, 1:1, …).
    */
   ratio?: string;
-  /** Override the default model (gpt_image_2). */
+  /** Override the default model (gpt_image_2_5_sunburst). */
   model?: RunwayModelId;
+  /** Rendering quality. Defaults to `high`. `xhigh` / `max` cost more. */
+  quality?: ImageQuality;
   /** Generation ID for cost tracking. Pass "" to skip (e.g. spike scripts). */
   generationId: string;
   /** Human-readable description for the cost log. */
   description: string;
 };
 
+export type ImageQuality = "low" | "medium" | "high" | "xhigh" | "max";
+
 function costKeyForImage(model: RunwayModelId, ratio: string): string {
-  // 1080p costs more for gpt_image_2 / gen4_image; otherwise same key.
-  const isHd = /1080|1920/.test(ratio);
-  if (model === RUNWAY_MODELS.GPT_IMAGE_2)
-    return isHd ? "runway/gpt_image_2_hd" : "runway/gpt_image_2";
-  if (model === RUNWAY_MODELS.GEN4_IMAGE)
-    return isHd ? "runway/gen4_image_hd" : "runway/gen4_image";
-  return `runway/${model}`;
+  // 4K tier (≥2560 on the long side) bills at the HD rate.
+  const isHd = /2560|2880|3264|3840/.test(ratio);
+  return isHd ? `runway/${model}_hd` : `runway/${model}`;
 }
 
 export async function generateImage(
@@ -92,13 +91,14 @@ export async function generateImage(
 ): Promise<RunwayTaskResult<string[]>> {
   return withSlot(async () => {
     const client = getRunwayClient();
-    const model = input.model ?? RUNWAY_MODELS.GPT_IMAGE_2;
-    const ratio = input.ratio ?? "1280:720";
+    const model = input.model ?? RUNWAY_MODELS.GPT_IMAGE_2_5;
+    const ratio = input.ratio ?? "1920:1088";
 
     const params: Record<string, unknown> = {
       model,
       promptText: input.promptText,
       ratio,
+      quality: input.quality ?? "high",
     };
 
     if (input.references && input.references.length > 0) {
@@ -127,7 +127,7 @@ export type ImageEditInput = {
   promptText: string;
   /** Source images to edit / compose from. The first is treated as the primary canvas. */
   inputImages: ReferenceImage[];
-  /** Output ratio — usually matches the source. Use toGptImage2Ratio() for gpt_image_2. */
+  /** Output ratio — usually matches the source. Use toGptImageRatio(). */
   ratio?: string;
   /**
    * Optional alpha-mask URI applied to inputImages[0]. Transparent regions
@@ -137,32 +137,33 @@ export type ImageEditInput = {
    */
   maskUri?: string;
   model?: RunwayModelId;
+  quality?: ImageQuality;
   generationId: string;
   description: string;
 };
 
 /**
- * Edit-with-input-images via gpt_image_2. Used for the Frame Anchor pipeline's
- * step 3 (swap character identity into a Seedance first frame) and for the
- * ported `edit_plate` flow (apply edits to existing plates / bibles).
+ * Edit-with-input-images via GPT Image 2.5. Used by edit_plate (apply edits
+ * to existing plates) and generate_keyframe (compose plates into a first
+ * frame for Seedance).
  */
 export async function editImage(
   input: ImageEditInput
 ): Promise<RunwayTaskResult<string[]>> {
   return withSlot(async () => {
     const client = getRunwayClient();
-    const model = input.model ?? RUNWAY_MODELS.GPT_IMAGE_2;
-    const ratio = input.ratio ?? "1280:720";
+    const model = input.model ?? RUNWAY_MODELS.GPT_IMAGE_2_5;
+    const ratio = input.ratio ?? "1920:1088";
 
-    // Runway gpt_image_2 uses `referenceImages` for BOTH generate-with-refs
-    // and edit-with-input-images — same wire key, same API endpoint
-    // (textToImage). Sending `inputImages` returns 400 "unrecognized key".
+    // Runway uses `referenceImages` for BOTH generate-with-refs and
+    // edit-with-input-images — same wire key, same endpoint (textToImage).
     // The internal type stays `inputImages` because semantically these are
     // edit sources, not just refs; we map at the boundary.
     const params: Record<string, unknown> = {
       model,
       promptText: input.promptText,
       ratio,
+      quality: input.quality ?? "high",
       referenceImages: input.inputImages.map((r) => ({
         uri: r.uri,
         ...(r.tag ? { tag: r.tag } : {}),

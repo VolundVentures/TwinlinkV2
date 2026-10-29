@@ -1,7 +1,7 @@
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber, formatDbError } from "./types";
 // Runway pivot (May 2026 AUTEUR): swapped Nano Banana → gpt_image_2 via lib/runway.
-import { editImage, toGptImage2Ratio } from "@/lib/runway";
+import { editImage, toGptImageRatio } from "@/lib/runway";
 import { withAntiPrompt } from "@/lib/ai/prompts/anti-prompt-suffix";
 import { resolveTags, isValidTag, normalizeTag } from "@/lib/ai/tag-resolver";
 import { db } from "@/lib/db";
@@ -59,7 +59,7 @@ export const editPlateDefinition: ToolDefinition = {
         type: "array",
         items: { type: "string" },
         description:
-          "Optional direct image URLs to pass as additional references. Use this when the user has attached a file via the paperclip (the chat message will contain `[Attached reference: label — url]` — extract the url and pass it here). URLs are validated before being sent to Nano Banana.",
+          "Optional direct image URLs to pass as additional references. Use this when the user has attached a file via the paperclip (the chat message will contain `[Attached reference: label — url]` — extract the url and pass it here). URLs are validated before being sent to Runway.",
       },
       new_tag: {
         type: "string",
@@ -131,7 +131,7 @@ export const editPlateTool: ToolHandler = async (
 
     // Validate raw URLs the agent passed (user-attached via paperclip).
     // Bad URLs are rejected fast with a clear error instead of wasting a
-    // Replicate prediction.
+    // Runway task.
     if (rawReferenceUrls.length > 0) {
       const { ok, bad } = await validateImageUrls(rawReferenceUrls, { timeoutMs: 6_000 });
       if (!ok) {
@@ -178,7 +178,7 @@ export const editPlateTool: ToolHandler = async (
       .join(" ");
     const finalPrompt = withAntiPrompt(editBody);
 
-    const runwayRatio = toGptImage2Ratio(aspectRatio);
+    const runwayRatio = toGptImageRatio(aspectRatio);
     const taskResult = await editImage({
       promptText: finalPrompt,
       inputImages: imageUrls.map((uri) => ({ uri })),

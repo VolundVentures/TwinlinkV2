@@ -1,26 +1,23 @@
-// generate_coverage — Aleph 5s novel-view coverage from a master shot.
+// generate_coverage — alternate-angle coverage of an existing scene.
 //
-// Takes a master shot (video) and generates an alternate-angle variant of the
-// same fictional moment. Same character, same wardrobe, same lighting, same
-// time of day — different camera position. Editor cuts between master and
-// coverage in post for dynamic editorial pacing.
-//
-// Aleph max duration is 5 seconds. For master shots longer than 5s, the
-// coverage will animate the equivalent first 5s window of the master.
+// Seedance 2.5 video-to-video in `reference` mode: the master scene is the
+// conditioning video, the prompt asserts continuity and names the new camera
+// position. Output is a new scene of the same length. Cost: output seconds
+// + input seconds (25s master ≈ 1,125 credits at 720p) — generate coverage
+// only where the cut needs it.
 
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber, formatDbError } from "./types";
-import { alephCoverage, toRunwayRatio } from "@/lib/runway";
+import { seedanceVideoToVideo, toSeedanceRatio } from "@/lib/runway";
 import { db } from "@/lib/db";
 import { persistAsset } from "@/lib/generation/persist-asset";
 
 export const generateCoverageDefinition: ToolDefinition = {
   name: "generate_coverage",
   description:
-    "Generate alternate-angle coverage from a master shot via Aleph (5s max). The coverage shows the SAME fictional moment from a different camera position — close-up, OTS, low-angle, reverse, etc.\n\n" +
-    "**Prompt rule:** assert continuity explicitly. e.g. *'Same scene, same moment, same character, same lighting — but [new angle].'* Aleph's strength is preserving the world while changing the camera.\n\n" +
-    "Useful angles: close-up, over-the-shoulder, low-angle, high-angle, reverse, profile, hand close-up. Generate 2-4 variants per master to give the editor cutting options.\n\n" +
-    "Costs 12 credits.",
+    "Generate alternate-angle coverage of an existing scene via Seedance 2.5 (video reference mode). The coverage shows the SAME fictional moment from a different camera position — close-up, OTS, low-angle, reverse — at the same length as the master.\n\n" +
+    "**Prompt rule:** assert continuity explicitly. e.g. *'Same scene, same moment, same character, same lighting, same dialogue — but [new angle].'*\n\n" +
+    "Expensive (≈ master length × 45 cr/s). Generate 1–2 variants per master, only where the edit needs a cut.",
   input_schema: {
     type: "object",
     properties: {
@@ -39,7 +36,7 @@ export const generateCoverageDefinition: ToolDefinition = {
       angle_prompt: {
         type: "string",
         description:
-          "Aleph instruction. Lead with continuity assertion ('Same scene, same moment, same character, same lighting'), then describe the new angle.",
+          "Lead with the continuity assertion ('Same scene, same moment, same character, same lighting'), then describe the new angle and any framing beats.",
       },
       aspect_ratio: {
         type: "string",
@@ -71,10 +68,9 @@ export const generateCoverageTool: ToolHandler = async (
     };
   }
 
-  // Locate master.
   let masterQuery = db
     .from("generation_assets")
-    .select("id, public_url, metadata, aspect_ratio")
+    .select("id, public_url, metadata, aspect_ratio, duration_seconds")
     .eq("generation_id", context.generationId)
     .eq("type", "video");
 
@@ -92,23 +88,28 @@ export const generateCoverageTool: ToolHandler = async (
   if (!master?.public_url) {
     return {
       success: false,
-      content: `No master shot found for ${masterAssetId ? `asset ${masterAssetId}` : `shot ${masterShotId}`}.`,
+      content: `No master scene found for ${masterAssetId ? `asset ${masterAssetId}` : `shot ${masterShotId}`}.`,
     };
   }
+  const masterMeta = (master.metadata as Record<string, unknown> | null) || {};
+  const duration =
+    (master.duration_seconds as number | null) || (masterMeta.duration as number | undefined) || 25;
 
   emitter.send("tool_progress", {
     tool: "generate_coverage",
     generationId: context.generationId,
     status: "generating",
-    message: `Generating coverage [${angleLabel}] from master`,
+    message: `Generating coverage [${angleLabel}] from master (${duration}s)`,
   });
 
   try {
-    const taskResult = await alephCoverage({
-      masterVideoUri: master.public_url,
-      anglePrompt,
-      duration: 5,
-      ratio: toRunwayRatio(aspectRatio),
+    const taskResult = await seedanceVideoToVideo({
+      promptVideo: master.public_url,
+      sourceDurationSeconds: duration,
+      mode: "reference",
+      promptText: anglePrompt,
+      duration,
+      ratio: toSeedanceRatio(master.aspect_ratio || aspectRatio),
       generationId: context.generationId,
       description: `coverage [${angleLabel}] from master ${masterShotId || master.id}`,
     });
@@ -131,19 +132,23 @@ export const generateCoverageTool: ToolHandler = async (
         generation_id: context.generationId,
         org_id: context.orgId,
         type: "video",
-        aspect_ratio: aspectRatio,
+        aspect_ratio: master.aspect_ratio || aspectRatio,
         public_url: persistentUrl,
         storage_path: persistentUrl,
-        duration_seconds: 5,
+        duration_seconds: duration,
         prediction_id: taskResult.taskId,
         status: "ready",
         parent_asset_id: master.id,
         metadata: {
           shot_role: "coverage",
+          model: "seedance2_5",
+          mode: "seedance_reference",
           angle_label: angleLabel,
           angle_prompt: anglePrompt,
-          master_shot_id: masterShotId || (master.metadata as Record<string, unknown> | null)?.shot_id,
+          master_shot_id: masterShotId || masterMeta.shot_id,
           master_asset_id: master.id,
+          duration,
+          has_native_audio: true,
           source_url: sourceUrl,
         },
         variant_number: variantNum,
@@ -152,10 +157,9 @@ export const generateCoverageTool: ToolHandler = async (
       .single();
 
     if (insertErr || !asset) {
-      const full = formatDbError(insertErr);
       return {
         success: false,
-        content: `Coverage generated but DB insert failed: ${full}. URL: ${sourceUrl}`,
+        content: `Coverage generated but DB insert failed: ${formatDbError(insertErr)}. URL: ${sourceUrl}`,
       };
     }
 
@@ -168,7 +172,7 @@ export const generateCoverageTool: ToolHandler = async (
 
     return {
       success: true,
-      content: `Coverage [${angleLabel}] generated from master ${masterShotId || master.id} (5s).`,
+      content: `Coverage [${angleLabel}] generated from master ${masterShotId || master.id} (${duration}s).`,
       assets: [
         {
           assetId: asset.id,
@@ -177,8 +181,8 @@ export const generateCoverageTool: ToolHandler = async (
           metadata: {
             shot_role: "coverage",
             angle_label: angleLabel,
-            duration_seconds: 5,
-            aspect_ratio: aspectRatio,
+            duration_seconds: duration,
+            aspect_ratio: master.aspect_ratio || aspectRatio,
           },
         },
       ],

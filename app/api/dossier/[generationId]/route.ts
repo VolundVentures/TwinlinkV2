@@ -8,8 +8,7 @@
 //   {
 //     project: { title, logline, durationSeconds, aspectRatio, endCard, ... },
 //     treatment_md: string  // rendered Markdown
-//     lesson_plan_md: string
-//     directors_notes_md: string  // pitch + storyboard discussion + review
+//     directors_notes_md: string  // chat with the director
 //     shot_list_csv: string
 //     project_json: object  // reopenable project state
 //     assets: {
@@ -17,7 +16,6 @@
 //       plates: Array<{ tag, kind, url, description }>
 //       keyframes: Array<{ tag, shot_id, url, role }>
 //       shots: Array<{ shot_id, url, mode, duration, aspect }>
-//       references: Array<{ url, caption, director }>  // whiteboard cards
 //     }
 //   }
 //
@@ -41,29 +39,6 @@ type AssetRow = {
   aspect_ratio?: string | null;
   metadata?: Record<string, unknown> | null;
   created_at?: string;
-};
-
-type LessonCard = {
-  id: string;
-  director_id: string;
-  film: string;
-  year?: number;
-  technique: string;
-  why: string;
-  created_at: number;
-};
-
-type Suggestion = {
-  id: string;
-  type: string;
-  director_id: string;
-  director_name: string;
-  status: "pending" | "applied" | "passed";
-  summary: string;
-  created_at: number;
-  target_ref?: string;
-  direction?: string;
-  brief?: string;
 };
 
 type ChatMessage = {
@@ -116,15 +91,6 @@ export async function GET(
     // Re-attach in the shape downstream code expects.
     (gen as Record<string, unknown>).generation_assets = assets;
 
-    const cfg = (gen.agent_config as Record<string, unknown> | null) || {};
-    const lessons = (cfg.lesson_plan as LessonCard[] | undefined) || [];
-    const suggestions = (cfg.suggestions as Suggestion[] | undefined) || [];
-    const whiteboardImages = (cfg.whiteboard_images as Array<{
-      url: string;
-      caption: string;
-      director_name: string;
-      created_at?: number;
-    }> | undefined) || [];
 
     // Source-of-truth asset rows — we attached these above after the
     // two-step fetch. The `gen` row was selected without the join so the
@@ -210,8 +176,7 @@ export async function GET(
 
     // ─── Render markdown / CSV ────────────────────────────────────────────
     const treatmentMd = renderTreatmentMd(treatment);
-    const lessonPlanMd = renderLessonPlanMd(lessons);
-    const directorsNotesMd = renderDirectorsNotesMd(transcript, suggestions);
+    const directorsNotesMd = renderDirectorsNotesMd(transcript);
     const shotListCsv = renderShotListCsv(shotsOut, keyframesOut, treatment);
 
     // Spec is sourced from the treatment, not from `generations` columns
@@ -237,24 +202,14 @@ export async function GET(
         created_at: gen.created_at,
       },
       treatment_md: treatmentMd,
-      lesson_plan_md: lessonPlanMd,
       directors_notes_md: directorsNotesMd,
       shot_list_csv: shotListCsv,
-      project_json: {
-        treatment,
-        suggestions,
-        lessons,
-      },
+      project_json: { treatment },
       assets: {
         final_film: finalFilm,
         plates: platesOut,
         keyframes: keyframesOut,
         shots: shotsOut,
-        references: whiteboardImages.map((w) => ({
-          url: w.url,
-          caption: w.caption,
-          director: w.director_name,
-        })),
       },
     });
   } catch (err) {
@@ -325,45 +280,8 @@ function renderTreatmentMd(t: Record<string, unknown> | null): string {
   return lines.join("\n");
 }
 
-function renderLessonPlanMd(lessons: LessonCard[]): string {
-  const lines: string[] = ["# Film School — what you learned", ""];
-  if (lessons.length === 0) {
-    lines.push("_No lessons recorded._");
-    return lines.join("\n");
-  }
-  // Group by director
-  const byDirector = new Map<string, LessonCard[]>();
-  for (const l of lessons) {
-    if (!byDirector.has(l.director_id)) byDirector.set(l.director_id, []);
-    byDirector.get(l.director_id)!.push(l);
-  }
-  for (const [dirId, items] of byDirector) {
-    lines.push(`## ${dirId}`);
-    lines.push("");
-    for (const l of items) {
-      lines.push(`### ${l.film}${l.year ? ` (${l.year})` : ""} — ${l.technique}`);
-      lines.push(l.why);
-      lines.push("");
-    }
-  }
-  return lines.join("\n");
-}
-
-function renderDirectorsNotesMd(
-  transcript: ChatMessage[],
-  suggestions: Suggestion[]
-): string {
+function renderDirectorsNotesMd(transcript: ChatMessage[]): string {
   const lines: string[] = ["# Director's Notes", ""];
-  lines.push("## Decisions");
-  lines.push("");
-  if (suggestions.length === 0) {
-    lines.push("_No decisions recorded._");
-  } else {
-    for (const s of suggestions) {
-      lines.push(`- **[${s.status}]** ${s.director_name} — ${s.summary}`);
-    }
-  }
-  lines.push("");
   lines.push("## Conversation");
   lines.push("");
   if (transcript.length === 0) {

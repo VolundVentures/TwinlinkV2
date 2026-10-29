@@ -3,7 +3,7 @@ import { getNextVariantNumber, formatDbError } from "./types";
 // Runway pivot (May 2026 AUTEUR): swapped Nano Banana → gpt_image_2 via lib/runway.
 // The old replicate-image imports are kept exported there for any callers that
 // haven't been migrated, but new flows use the Runway client.
-import { generateImage, editImage, toGptImage2Ratio } from "@/lib/runway";
+import { generateImage, editImage, toGptImageRatio } from "@/lib/runway";
 import { withAntiPrompt } from "@/lib/ai/prompts/anti-prompt-suffix";
 import { resolveTags, isValidTag, normalizeTag } from "@/lib/ai/tag-resolver";
 import { db } from "@/lib/db";
@@ -330,7 +330,7 @@ export const generatePlateTool: ToolHandler = async (
           .join("\n");
         return {
           success: false,
-          content: `Reference URL(s) are not usable as images — Replicate will reject them. Do NOT retry with these URLs.\n\n${details}\n\nFix: either (a) upload the file via the attach button so it's hosted on Supabase, (b) find a direct image link (ending in .jpg/.png/.webp), or (c) drop the reference and generate without it. If this was a website URL, it's a webpage not an image.`,
+          content: `Reference URL(s) are not usable as images — Runway will reject them. Do NOT retry with these URLs.\n\n${details}\n\nFix: either (a) upload the file via the attach button so it's hosted on Supabase, (b) find a direct image link (ending in .jpg/.png/.webp), or (c) drop the reference and generate without it. If this was a website URL, it's a webpage not an image.`,
         };
       }
     }
@@ -369,7 +369,7 @@ export const generatePlateTool: ToolHandler = async (
     }
 
     // Edit if we have refs, else pure text-to-image. Runway gpt_image_2.
-    const runwayRatio = toGptImage2Ratio(aspectRatio);
+    const runwayRatio = toGptImageRatio(aspectRatio);
     const desc = `plate @${tag} (${kind}, ${aspectRatio})`;
     const taskResult =
       refUrls.length > 0

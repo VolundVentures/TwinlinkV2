@@ -1,7 +1,7 @@
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber, formatDbError } from "./types";
 // Runway pivot (May 2026 AUTEUR): swapped Nano Banana → gpt_image_2 via lib/runway.
-import { generateImage as runwayGenerateImage, editImage, toGptImage2Ratio } from "@/lib/runway";
+import { generateImage as runwayGenerateImage, editImage, toGptImageRatio } from "@/lib/runway";
 import { withAntiPrompt } from "@/lib/ai/prompts/anti-prompt-suffix";
 import { resolveTags, normalizeTag } from "@/lib/ai/tag-resolver";
 import { db } from "@/lib/db";
@@ -9,7 +9,7 @@ import { persistAsset } from "@/lib/generation/persist-asset";
 import { validateImageUrls } from "@/lib/generation/validate-image-url";
 import { filmFrameDeclaration } from "@/lib/ai/prompts/nano-banana-patterns";
 
-// General-purpose image generation (Nano Banana via Replicate).
+// General-purpose image generation (GPT Image 2.5 via Runway).
 // Use this for free-form stills that aren't plates or keyframes — thumbnails,
 // ad stills, end cards, mood boards. For identity-locked assets use generate_plate;
 // for composited shot-keyframes use generate_keyframe.
@@ -17,7 +17,7 @@ import { filmFrameDeclaration } from "@/lib/ai/prompts/nano-banana-patterns";
 export const generateImageDefinition: ToolDefinition = {
   name: "generate_image",
   description:
-    "Generate a single still image via Nano Banana. The anti-prompt suffix (photorealistic, no beauty filter, film frame) is appended automatically.\n\n" +
+    "Generate a single still image via GPT Image 2.5. The anti-prompt suffix (photorealistic, no beauty filter, film frame) is appended automatically.\n\n" +
     "**When to use:**\n" +
     "- End-card stills (black frame with tagline)\n" +
     "- Thumbnail / poster art\n" +
@@ -125,7 +125,7 @@ export const generateImageTool: ToolHandler = async (
     // no-beauty-filter language on top.
     const finalPrompt = withAntiPrompt(`${resolved}\n\n${filmFrameDeclaration(aspectRatio)}`);
 
-    const runwayRatio = toGptImage2Ratio(aspectRatio);
+    const runwayRatio = toGptImageRatio(aspectRatio);
     const taskResult =
       refUrls.length > 0
         ? await editImage({

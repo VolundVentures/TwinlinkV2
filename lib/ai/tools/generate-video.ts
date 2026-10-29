@@ -1,43 +1,45 @@
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber } from "./types";
-import { gen4ImageToVideo, toRunwayRatio } from "@/lib/runway";
+import {
+  seedanceImageToVideo,
+  toSeedanceRatio,
+  clampSceneDuration,
+  SCENE_DURATION,
+  SEEDANCE_MIN_DURATION,
+  SEEDANCE_MAX_DURATION,
+} from "@/lib/runway";
 import { lintVideoPrompt } from "@/lib/ai/prompt-lint";
 import { resolveTags, normalizeTag } from "@/lib/ai/tag-resolver";
 import { db } from "@/lib/db";
 import { persistAsset } from "@/lib/generation/persist-asset";
 
 // ============================================================================
-// generate_video — animate one keyframe with Gen-4.5 i2v.
+// generate_video — render one 25-second SCENE with Seedance 2.5.
 //
-// AUTEUR Frame Anchor pipeline (May 2026):
-//   1. plates (gpt_image_2)
-//   2. generate_keyframe composes plates into a first frame (gpt_image_2 edit)
-//   3. generate_video animates that frame with Gen-4.5 i2v ← THIS TOOL
+// Frame Anchor pipeline:
+//   1. plates (GPT Image 2.5)
+//   2. generate_keyframe composes plates into the scene's first frame
+//   3. generate_video renders the scene from that frame ← THIS TOOL
 //
-// Hero keyframes only. No FFLF — Gen-4.5 takes one promptImage. State
-// transitions are achieved via two cut shots, not one shot with two frames.
-// For different camera angles of the same fictional moment use generate_coverage
-// (Aleph). For style/grade tweaks use apply_signature_pass. For surgical edits
-// use apply_director_note.
-//
-// Duration: any integer 2-10 seconds (Gen-4.5 API range). Aspect locked to
-// user's film spec.
+// Seedance 2.5 renders 4–30s with native audio (dialogue, foley, ambience).
+// The default scene is 25s. The prompt is a short shooting script: camera
+// rule, timed beats, dialogue in quotes, sound cues in brackets.
 // ============================================================================
 
 export const generateVideoDefinition: ToolDefinition = {
   name: "generate_video",
   description:
-    "Animate one composed keyframe into a video shot via Gen-4.5 image-to-video. ALWAYS pass a hero keyframe by @tag — the keyframe carries composition, identity, lighting, framing. The motion prompt only describes movement.\n\n" +
-    "**Prompt — ≤25 words, MECHANICAL.**\n" +
-    "- Format: `[camera rule]. [motion verb].`\n" +
-    "- Good: `static camera. orlando turns head toward the mirror, gaze lingers one beat.`\n" +
-    "- Good: `slow dolly in. maria raises pistol; focus pulls from her face to the barrel.`\n" +
-    "- Bad: narrative paragraphs, adjectives, vibes. Forbidden: 'cinematic', 'epic', '8K', 'ultra-realistic'.\n\n" +
-    "**Duration:** any integer from 2 to 10 seconds (Gen-4.5's API range). Default 5. Pick the duration that serves the moment — a glance is 2-3s, a held silence is 6-8s, a Steadicam pass is 10s. Cost scales linearly at 3 credits per second.\n\n" +
+    "Render one SCENE (default 25s) from a composed keyframe via Seedance 2.5. The keyframe is pinned as frame 0 and carries composition, identity, lighting and framing. The prompt is the SCENE DIRECTION for the full 25 seconds — with native audio.\n\n" +
+    "**Prompt — a shooting script, ≤220 words.**\n" +
+    "- Open with the camera rule, then 2–4 timed beats, then dialogue (in quotes, with who speaks) and sound cues (in brackets).\n" +
+    "- Good: `locked off. 0-6s: hana lifts her gaze from the glass, holds. 6-15s: she says \"you came back\" — barely audible. [ice shifts in the glass] 15-25s: neon flickers on outside; she turns to the window. [distant traffic, rain begins]`\n" +
+    "- Bad: adjectives, vibes, restating the look. Forbidden: 'cinematic', 'epic', '8K', 'ultra-realistic'.\n\n" +
+    `**Duration:** integer ${SEEDANCE_MIN_DURATION}–${SEEDANCE_MAX_DURATION}s. Default ${SCENE_DURATION}. Every narrative scene is ${SCENE_DURATION}s unless the script says otherwise; end cards are short.\n\n` +
+    "**Identity:** pass `reference_tags` (character / location plates) when the scene must hold a face across 25 seconds. This switches Seedance to reference mode (keyframe + plates guide, nothing pinned) — use it for character scenes; leave it off for empty environments.\n\n" +
     "**When NOT to use this tool:**\n" +
-    "- For a different camera angle of the same fictional moment from an existing shot → call `generate_coverage` (Aleph).\n" +
-    "- To imprint the lead director's color/grade fingerprint on a rendered shot → call `apply_signature_pass` (Aleph).\n" +
-    "- For a surgical change to a rendered shot (eyeline, weather, swap object) → call `apply_director_note` (Aleph).",
+    "- A different camera angle of an existing scene → `generate_coverage`.\n" +
+    "- The lead director's grade on a rendered scene → `apply_signature_pass`.\n" +
+    "- One change to a rendered scene (eyeline, weather, object) → `edit_video`.",
   input_schema: {
     type: "object",
     properties: {
@@ -49,14 +51,28 @@ export const generateVideoDefinition: ToolDefinition = {
       prompt: {
         type: "string",
         description:
-          "≤25 words, mechanical. Format: '[camera rule]. [motion verb].' No adjectives.",
+          "Scene direction, ≤220 words: '[camera rule]. 0-8s: … 8-18s: … 18-25s: …'. Dialogue in quotes, sound in brackets.",
       },
       duration_seconds: {
         type: "integer",
-        minimum: 2,
-        maximum: 10,
+        minimum: SEEDANCE_MIN_DURATION,
+        maximum: SEEDANCE_MAX_DURATION,
+        description: `Scene duration. Default ${SCENE_DURATION}.`,
+      },
+      reference_tags: {
+        type: "array",
+        items: { type: "string" },
         description:
-          "Shot duration in seconds. Any integer 2 to 10. Default 5. Pick what serves the moment.",
+          "Optional @tags of plates (character sheets, location) passed as identity references. Recommended for any scene with a recurring face.",
+      },
+      resolution: {
+        type: "string",
+        enum: ["720p", "1080p"],
+        description: "Default 720p. 1080p costs ~2.3× — use for the final re-render of approved scenes only.",
+      },
+      audio: {
+        type: "boolean",
+        description: "Native audio (dialogue / foley / ambience). Default true. Set false only for silent-by-design scenes.",
       },
       aspect_ratio: {
         type: "string",
@@ -68,9 +84,7 @@ export const generateVideoDefinition: ToolDefinition = {
   },
 };
 
-// Trim a longer string to the first sentence (or N chars) for prompt suffix
-// use. Keeps the motion prompt under the model's effective length without
-// chopping mid-word.
+// Trim a longer string to a clean boundary for prompt suffix use.
 function truncatePhrase(s: string, max: number): string {
   if (!s) return "";
   const cleaned = s.replace(/\s+/g, " ").trim();
@@ -92,31 +106,28 @@ export const generateVideoTool: ToolHandler = async (
   const keyframeTag = input.keyframe_tag
     ? normalizeTag(input.keyframe_tag as string)
     : undefined;
-  const rawDuration = (input.duration_seconds as number) ?? 5;
-  // Gen-4.5 i2v accepts any integer 2–10 seconds. Clamp to the API range and
-  // round to integer (the model rejects floats).
-  const durationSeconds = Math.max(2, Math.min(10, Math.round(rawDuration)));
-  const aspectRatio =
-    (input.aspect_ratio as string) || context.aspectRatio || "16:9";
+  const durationSeconds = clampSceneDuration(input.duration_seconds as number | undefined);
+  const aspectRatio = (input.aspect_ratio as string) || context.aspectRatio || "16:9";
+  const hd = input.resolution === "1080p";
+  const audio = input.audio !== false;
+  const referenceTags = ((input.reference_tags as string[] | undefined) || []).map(normalizeTag);
 
   if (!keyframeTag) {
     return {
       success: false,
       content:
-        "generate_video requires keyframe_tag. Compose the shot's keyframe first via generate_keyframe, then animate it here.",
+        "generate_video requires keyframe_tag. Compose the scene's keyframe first via generate_keyframe, then render it here.",
     };
   }
 
-  // Lint the motion prompt (≤25 words, no banned adjectives).
   const lint = lintVideoPrompt(prompt);
   if (!lint.ok) {
     return {
       success: false,
-      content: `Motion prompt failed lint (${lint.wordCount} words). Fix and retry:\n- ${lint.warnings.join("\n- ")}`,
+      content: `Scene direction failed lint (${lint.wordCount} words). Fix and retry:\n- ${lint.warnings.join("\n- ")}`,
     };
   }
 
-  // Resolve keyframe tag → URL.
   const kf = await resolveTags("", context.generationId, [keyframeTag]);
   if (kf.unresolved.length > 0) {
     return {
@@ -126,56 +137,50 @@ export const generateVideoTool: ToolHandler = async (
   }
   const keyframeUrl = kf.imageUrls[0];
 
-  // ── Compose the final motion prompt ──────────────────────────────────────
-  // The LLM-authored prompt is a motion description (≤25 words, mechanical).
-  // We append TWO authored suffixes:
-  //
-  // 1. ANTI-LIP-SYNC. The single most visible failure of the current
-  //    pipeline: characters appear to be speaking mid-shot but there's no
-  //    audio (audio is composed in post via VO, not synced). Without an
-  //    explicit instruction Gen-4.5 frequently animates mouth movement
-  //    from neutral face poses. This suffix is added to EVERY motion
-  //    prompt — it's never wrong to ask for it.
-  //
-  // 2. DIRECTOR MOTION SIGNATURE. The lead director's school informs HOW
-  //    the camera + subject move (Scorsese = kinetic tracking; Wong Kar-wai
-  //    = slow shutter + smoke; Villeneuve = stately push-ins). We append
-  //    a 10-15 word fingerprint pulled from the persona's visualSignature.
-  //    Until today the director persona was a chat character with zero
-  //    influence on what actually got generated; this is the first thread.
+  let referenceImages: string[] = [];
+  if (referenceTags.length > 0) {
+    const refs = await resolveTags("", context.generationId, referenceTags);
+    if (refs.unresolved.length > 0) {
+      return {
+        success: false,
+        content: `Unresolved reference tags: ${refs.unresolved.map((t) => `@${t}`).join(", ")}. Generate those plates first or drop them.`,
+      };
+    }
+    referenceImages = refs.imageUrls;
+  }
+
+  // Append the lead director's motion signature so the school shapes HOW
+  // camera and subject move, not just what the keyframe looks like.
   const persona = context.leadDirector;
   const motionSignature = persona?.visualSignature
-    ? `Motion in the visual signature of ${persona.name}: ${truncatePhrase(persona.visualSignature, 110)}.`
+    ? `Movement in the signature of ${persona.name}: ${truncatePhrase(persona.visualSignature, 110)}.`
     : "";
-  const antiLipSync =
-    "No dialogue, no lip movement — subjects do not speak; mouths closed or natural breathing only.";
-  const promptText = [prompt.trim(), antiLipSync, motionSignature]
-    .filter(Boolean)
-    .join(" ");
+  const promptText = [prompt.trim(), motionSignature].filter(Boolean).join(" ");
 
   emitter.send("tool_progress", {
     tool: "generate_video",
     generationId: context.generationId,
     status: "generating",
-    message: `Animating ${shotId} (Gen-4.5 i2v, ${aspectRatio}, ${durationSeconds}s)…`,
+    message: `Rendering scene ${shotId} (Seedance 2.5, ${aspectRatio}, ${durationSeconds}s${hd ? ", 1080p" : ""})…`,
   });
 
   try {
-    const taskResult = await gen4ImageToVideo({
+    const taskResult = await seedanceImageToVideo({
       promptText,
-      promptImage: keyframeUrl,
+      firstFrame: keyframeUrl,
+      referenceImages: referenceImages.length ? referenceImages : undefined,
       duration: durationSeconds,
-      ratio: toRunwayRatio(aspectRatio),
+      ratio: toSeedanceRatio(aspectRatio, hd),
+      audio,
       generationId: context.generationId,
-      description: `shot ${shotId} (Gen-4.5 i2v, ${durationSeconds}s)`,
+      description: `scene ${shotId} (Seedance 2.5, ${durationSeconds}s)`,
     });
 
     const sourceUrl = Array.isArray(taskResult.output)
       ? taskResult.output[0]
       : (taskResult.output as unknown as string);
-
     if (!sourceUrl) {
-      return { success: false, content: "Gen-4.5 returned no output URL." };
+      return { success: false, content: "Seedance returned no output URL." };
     }
 
     const persistentUrl = await persistAsset(sourceUrl, {
@@ -195,18 +200,22 @@ export const generateVideoTool: ToolHandler = async (
         public_url: persistentUrl,
         storage_path: persistentUrl,
         asset_role: "shot",
+        duration_seconds: durationSeconds,
         prediction_id: taskResult.taskId,
         status: "ready",
         metadata: {
           shot_id: shotId,
           shot_role: "master",
-          model: "gen4.5",
-          mode: "gen4_5_i2v",
+          model: "seedance2_5",
+          mode: referenceImages.length ? "seedance_reference" : "seedance_first_frame",
           prompt,
           composed_prompt: promptText,
           director_id: persona?.id ?? null,
           keyframe_tag: keyframeTag,
+          reference_tags: referenceTags,
           duration: durationSeconds,
+          has_native_audio: audio,
+          resolution: hd ? "1080p" : "720p",
           source_url: sourceUrl,
         },
         variant_number: variantNum,
@@ -218,12 +227,12 @@ export const generateVideoTool: ToolHandler = async (
       tool: "generate_video",
       generationId: context.generationId,
       status: "complete",
-      message: `Shot ${shotId} ready.`,
+      message: `Scene ${shotId} ready.`,
     });
 
     return {
       success: true,
-      content: `Shot ${shotId} animated (Gen-4.5 i2v, ${aspectRatio}, ${durationSeconds}s). URL: ${persistentUrl}`,
+      content: `Scene ${shotId} rendered (Seedance 2.5, ${aspectRatio}, ${durationSeconds}s, native audio ${audio ? "on" : "off"}). URL: ${persistentUrl}`,
       assets: [
         {
           assetId: asset?.id,
@@ -233,9 +242,10 @@ export const generateVideoTool: ToolHandler = async (
             shot_id: shotId,
             role: "shot",
             shot_role: "master",
-            mode: "gen4_5_i2v",
+            mode: "seedance2_5",
             aspect_ratio: aspectRatio,
             duration: durationSeconds,
+            has_native_audio: audio,
             image_urls: [keyframeUrl],
           },
         },
@@ -245,7 +255,7 @@ export const generateVideoTool: ToolHandler = async (
     console.error("[tool:generate_video] Error:", error);
     return {
       success: false,
-      content: `Video generation failed: ${error instanceof Error ? error.message : String(error)}`,
+      content: `Scene render failed: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 };

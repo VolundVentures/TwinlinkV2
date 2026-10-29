@@ -1,43 +1,37 @@
-// Public API surface for the Runway client.
+// Public API surface for the Runway client. Every generation call in the
+// app goes through here.
 
 export { getRunwayClient, RUNWAY_API_VERSION } from "./client";
 export { RUNWAY_MODELS, type RunwayModelId } from "./models";
 export type { ReferenceImage, RunwayRatio, RunwayTaskResult } from "./types";
-export { toRunwayRatio, toGptImage2Ratio } from "./ratio-map";
+export { toSeedanceRatio, toGptImageRatio } from "./ratio-map";
 
-// Image generation + edit
+// Image generation + edit (GPT Image 2.5)
 export { generateImage, editImage } from "./image";
-export type { ImageGenerateInput, ImageEditInput } from "./image";
+export type { ImageGenerateInput, ImageEditInput, ImageQuality } from "./image";
 
-// Video — Seedance
-export { seedanceTextToVideo, seedanceImageToVideo } from "./video-seedance";
-export type { SeedanceTextToVideoInput, SeedanceImageToVideoInput } from "./video-seedance";
+// Scenes — Seedance 2.5 (25s, native audio)
+export {
+  seedanceTextToVideo,
+  seedanceImageToVideo,
+  seedanceVideoToVideo,
+  clampSceneDuration,
+  SCENE_DURATION,
+  SEEDANCE_MIN_DURATION,
+  SEEDANCE_MAX_DURATION,
+} from "./video-seedance";
+export type {
+  SeedanceTextToVideoInput,
+  SeedanceImageToVideoInput,
+  SeedanceVideoToVideoInput,
+} from "./video-seedance";
 
-// Video — Gen-4 family
-export { gen4ImageToVideo, gen4TextToVideo } from "./video-gen4";
-export type { Gen4ImageToVideoInput, Gen4TextToVideoInput } from "./video-gen4";
+// Finish — 4K master
+export { upscaleVideo } from "./video-upscale";
 
-// Video — Aleph (5s max)
-export { alephCoverage, alephSignaturePass, alephEdit } from "./video-aleph";
-
-// Audio (ElevenLabs via Runway)
-export { textToSpeech, textToSound } from "./audio";
+// Audio (ElevenLabs + seed_audio via Runway)
+export { textToSpeech, textToSound, generateScore } from "./audio";
 
 // Uploads
 export { uploadEphemeral } from "./uploads";
 export type { UploadResult } from "./uploads";
-
-// Characters (gwm1_avatars)
-export {
-  createAvatar,
-  createReadySession,
-  createCustomVoice,
-  pollVoiceReady,
-} from "./characters";
-export type {
-  AvatarVoice,
-  CreateAvatarInput,
-  CreateSessionInput,
-  SessionCredentials,
-  CreateCustomVoiceInput,
-} from "./characters";

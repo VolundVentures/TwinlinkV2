@@ -1,15 +1,16 @@
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber } from "./types";
-import { generateMusic } from "@/lib/generation/music";
+import { generateScore } from "@/lib/runway";
+import { persistAsset } from "@/lib/generation/persist-asset";
 import { db } from "@/lib/db";
 
 export const generateMusicDefinition: ToolDefinition = {
   name: "generate_music",
   description:
-    "Generate instrumental background music using Suno. ALWAYS instrumental, no vocals. Costs 5 credits.\n\n" +
-    "**STRUCTURED INPUT REQUIRED.** A vague prompt like 'cinematic music' produces basic Suno output. This tool builds a professional music brief by forcing you to fill concrete fields, then composes the final Suno prompt for you. Do NOT write `prompt` — write the structured fields.\n\n" +
+    "Generate the instrumental score via Runway seed_audio. ALWAYS instrumental, no vocals. Costs 2 credits.\n\n" +
+    "**STRUCTURED INPUT REQUIRED.** A vague prompt like 'cinematic music' produces stock-library output. This tool builds a professional music brief by forcing you to fill concrete fields, then composes the final music brief for you. Do NOT write `prompt` — write the structured fields.\n\n" +
     "**Fields you must fill:**\n" +
-    "- `genre_refs` (array of 1–3 reference tracks/artists): e.g. ['Hans Zimmer Interstellar soundtrack', 'Bon Iver 22, A Million', 'Nils Frahm piano']. Real songs/artists ground Suno dramatically. Pick from real catalog, not generic descriptors.\n" +
+    "- `genre_refs` (array of 1–3 reference tracks/artists): e.g. ['Hans Zimmer Interstellar soundtrack', 'Bon Iver 22, A Million', 'Nils Frahm piano']. Real songs/artists ground the model dramatically. Pick from real catalog, not generic descriptors.\n" +
     "- `bpm` (60–160): beats per minute. 60–80 intimate/luxury, 90–110 warm storytelling, 110–125 confident brand, 125–140 energetic, 140+ aggressive.\n" +
     "- `key` ('minor' | 'major'): emotional tilt. Minor for tension, longing, drama. Major for triumph, warmth, joy.\n" +
     "- `instruments` (array, 3–6 primary instruments): be specific. 'felt piano + cello + sub-bass + hi-hat' beats 'orchestral'.\n" +
@@ -17,7 +18,7 @@ export const generateMusicDefinition: ToolDefinition = {
     "- `energy` ('low' | 'medium' | 'high' | 'building'): overall intensity. 'building' = starts sparse, grows.\n" +
     "- `mood_tags` (3–5 one-word tags): 'nostalgic', 'hopeful', 'tense', 'triumphant', 'melancholic', 'gritty', etc. Specific beats generic.\n" +
     "- `negative_traits` (optional, array): things to EXCLUDE — 'no vocals', 'no cheesy synth leads', 'no EDM drop', 'no generic stock-music feel'.\n\n" +
-    "The tool composes a reference-grade Suno prompt from these fields and injects 'starts immediately, no intro silence' automatically.",
+    "The tool composes a reference-grade music brief from these fields and injects 'starts immediately, no intro silence' automatically.",
   input_schema: {
     type: "object",
     properties: {
@@ -85,11 +86,11 @@ export const generateMusicDefinition: ToolDefinition = {
 };
 
 /**
- * Compose a professional Suno prompt from the structured fields. Suno responds
+ * Compose a professional music brief from the structured fields. The model responds
  * dramatically better to a dense brief naming real artists/tracks, exact BPM,
  * instrument stack, and arc than to a vague "cinematic uplifting mood" prompt.
  */
-function buildSunoPrompt(input: {
+function buildMusicBrief(input: {
   genre_refs: string[];
   bpm: number;
   key: "minor" | "major";
@@ -116,7 +117,7 @@ function buildSunoPrompt(input: {
     `Real instruments feel, not stock loops. Mastering: cinema-level dynamic range, not radio-crushed.${negatives}`,
   ].join(" ");
 
-  // Suno's `style` tag takes a flat list of descriptors.
+  // Flat list of style descriptors appended to the brief.
   const style = [
     `${input.bpm}bpm`,
     input.key,
@@ -138,7 +139,7 @@ export const generateMusicTool: ToolHandler = async (
 ): Promise<ToolResult> => {
   // Accept structured fields (the production path). Legacy free-form `prompt`
   // + `style` are still accepted for backward compat but strongly discouraged —
-  // they produced the "basic Suno" quality the user flagged.
+  // they produced stock-library quality.
   const genreRefs = (input.genre_refs as string[]) || [];
   const bpm = input.bpm as number | undefined;
   const key = input.key as "minor" | "major" | undefined;
@@ -153,7 +154,7 @@ export const generateMusicTool: ToolHandler = async (
   let prompt: string;
   let style: string | undefined;
   if (genreRefs.length && bpm && key && instruments.length && arc && energy && moodTags.length) {
-    const built = buildSunoPrompt({
+    const built = buildMusicBrief({
       genre_refs: genreRefs,
       bpm,
       key,
@@ -193,167 +194,102 @@ export const generateMusicTool: ToolHandler = async (
     tool: "generate_music",
     generationId: context.generationId,
     status: "generating",
-    message: "Generating background music with Suno AI...",
+    message: "Scoring the film (Runway seed_audio)...",
   });
 
-  // Retry up to 2 times — Suno can be flaky
-  const MAX_RETRIES = 2;
-  let lastError = "";
+  try {
+    const taskResult = await generateScore({
+      promptText: `${prompt}${style ? ` Style: ${style}.` : ""}`,
+      durationSeconds: targetDuration,
+      generationId: context.generationId,
+      description: `score "${title}" (${targetDuration}s)`,
+    });
+    const sourceUrl = Array.isArray(taskResult.output)
+      ? taskResult.output[0]
+      : (taskResult.output as unknown as string);
+    if (!sourceUrl) throw new Error("seed_audio returned no output URL");
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      if (attempt > 1) {
-        console.log(`[tool:generate_music] Retry attempt ${attempt}/${MAX_RETRIES}...`);
-        emitter.send("tool_progress", {
-          tool: "generate_music",
-          generationId: context.generationId,
-          status: "generating",
-          message: `Music generation retry ${attempt}/${MAX_RETRIES}...`,
-        });
-      }
+    emitter.send("tool_progress", {
+      tool: "generate_music",
+      generationId: context.generationId,
+      status: "saving",
+      message: "Uploading score to permanent storage...",
+    });
+    const permanentUrl = await persistAsset(sourceUrl, {
+      generationId: context.generationId,
+      kind: "audio",
+      basename: `score-${Date.now()}`,
+    });
 
-      const result = await generateMusic({
-        prompt,
-        style,
-        title,
-        instrumental: true,
-        generationId: context.generationId,
-        targetDuration,
-      });
-
-      emitter.send("tool_progress", {
-        tool: "generate_music",
-        generationId: context.generationId,
-        status: "saving",
-        message: "Uploading music to permanent storage...",
-      });
-
-      // Upload to Supabase Storage for a PERMANENT URL
-      // Suno returns URLs from tempfile.aiquickdraw.com which expire
-      let permanentUrl = result.audioUrl;
-      try {
-        const audioRes = await fetch(result.audioUrl);
-        if (audioRes.ok) {
-          const audioBuffer = await audioRes.arrayBuffer();
-          const fileName = `music-${context.generationId}-${Date.now()}.mp3`;
-
-          const { error: bucketError } = await db.storage.createBucket("music", {
-            public: true,
-            allowedMimeTypes: ["audio/mpeg", "audio/wav", "audio/mp3"],
-          });
-          if (bucketError && !bucketError.message.includes("already exists")) {
-            console.warn("[tool:generate_music] Bucket creation warning:", bucketError.message);
-          }
-
-          const { error: uploadError } = await db.storage
-            .from("music")
-            .upload(fileName, audioBuffer, { contentType: "audio/mpeg", upsert: true });
-
-          if (!uploadError) {
-            const { data: publicUrlData } = db.storage.from("music").getPublicUrl(fileName);
-            permanentUrl = publicUrlData.publicUrl;
-            console.log("[tool:generate_music] Uploaded to Supabase Storage:", permanentUrl.slice(0, 80));
-          } else {
-            console.warn("[tool:generate_music] Supabase upload failed, using Suno URL:", uploadError.message);
-          }
-        }
-      } catch (uploadErr) {
-        console.warn("[tool:generate_music] Failed to re-upload music, using Suno URL:", uploadErr);
-      }
-
-      // Save to generation_assets
-      const variantNum = await getNextVariantNumber(context.generationId);
-      const { data: asset, error: saveError } = await db
-        .from("generation_assets")
-        .insert({
-          generation_id: context.generationId,
-          org_id: context.orgId,
-          type: "audio",
-          storage_path: permanentUrl,
-          public_url: permanentUrl,
-          metadata: {
-            asset_category: "background_music",
-            prompt,
-            style,
-            title: result.title,
-            duration_seconds: result.duration,
-            provider: "suno",
-            instrumental: true,
-            // Persist the structured brief so we can inspect what actually
-            // drove the track (and regenerate variants from the same spec).
-            brief: {
-              genre_refs: genreRefs,
-              bpm,
-              key,
-              instruments,
-              arc,
-              energy,
-              mood_tags: moodTags,
-              negative_traits: negativeTraits,
-            },
+    const variantNum = await getNextVariantNumber(context.generationId);
+    const { data: asset, error: saveError } = await db
+      .from("generation_assets")
+      .insert({
+        generation_id: context.generationId,
+        org_id: context.orgId,
+        type: "audio",
+        storage_path: permanentUrl,
+        public_url: permanentUrl,
+        prediction_id: taskResult.taskId,
+        metadata: {
+          asset_category: "background_music",
+          prompt,
+          style,
+          title,
+          duration_seconds: targetDuration,
+          provider: "runway/seed_audio",
+          instrumental: true,
+          brief: {
+            genre_refs: genreRefs,
+            bpm,
+            key,
+            instruments,
+            arc,
+            energy,
+            mood_tags: moodTags,
+            negative_traits: negativeTraits,
           },
-          variant_number: variantNum,
-        })
-        .select("id")
-        .single();
+        },
+        variant_number: variantNum,
+      })
+      .select("id")
+      .single();
+    if (saveError) {
+      console.warn("[tool:generate_music] Failed to save:", saveError.message);
+    }
 
-      if (saveError) {
-        console.warn("[tool:generate_music] Failed to save:", saveError.message);
-      }
+    emitter.send("tool_progress", {
+      tool: "generate_music",
+      generationId: context.generationId,
+      status: "complete",
+      message: "Score generated",
+    });
 
-      emitter.send("tool_progress", {
-        tool: "generate_music",
-        generationId: context.generationId,
-        status: "complete",
-        message: "Background music generated",
-      });
-
-      const summary = [
-        `Background music generated successfully`,
-        `Title: "${result.title}"`,
-        `Duration: ${result.duration}s`,
+    return {
+      success: true,
+      content: [
+        `Score generated: "${title}" (~${targetDuration}s)`,
         `Audio URL: ${permanentUrl}`,
         "",
         "IMPORTANT: Pass this EXACT URL as background_music_url when calling compose_video:",
         permanentUrl,
-      ].join("\n");
-
-      return {
-        success: true,
-        content: summary,
-        data: { ...result, audioUrl: permanentUrl },
-        assets: [
-          {
-            assetId: asset?.id,
-            type: "audio",
-            url: permanentUrl,
-            metadata: {
-              asset_category: "background_music",
-              title: result.title,
-              duration_seconds: result.duration,
-            },
-          },
-        ],
-      };
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-      console.error(`[tool:generate_music] Attempt ${attempt}/${MAX_RETRIES} failed:`, lastError);
-
-      // Don't retry on config errors
-      if (lastError.includes("SUNO_API_KEY")) break;
-    }
+      ].join("\n"),
+      data: { audioUrl: permanentUrl, title, duration: targetDuration },
+      assets: [
+        {
+          assetId: asset?.id,
+          type: "audio",
+          url: permanentUrl,
+          metadata: { asset_category: "background_music", title, duration_seconds: targetDuration },
+        },
+      ],
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[tool:generate_music] failed:", msg);
+    return {
+      success: false,
+      content: `Score generation failed: ${msg}\n\nProceed to compose_video WITHOUT background_music_url rather than retrying — the scenes carry native audio, and the user can add a score later.`,
+    };
   }
-
-  // All retries exhausted
-  let hint = "";
-  if (lastError.includes("SUNO_API_KEY")) {
-    hint = " Set SUNO_API_KEY in your .env file.";
-  } else if (lastError.includes("timeout")) {
-    hint = " Suno timed out after retries. The service may be overloaded.";
-  }
-
-  return {
-    success: false,
-    content: `Music generation failed after ${MAX_RETRIES} attempts: ${lastError}${hint}\n\nMusic generation is unreliable. Proceed to compose_video WITHOUT background_music_url — it's better to deliver a video without music than to keep retrying and waste time/credits. The user can add music later.`,
-  };
 };

@@ -1,32 +1,26 @@
-// Canonical Runway model identifiers.
+// Canonical Runway model identifiers (docs.dev.runwayml.com, Sept 2026).
 //
-// These map to Runway's API model parameter strings exactly. Centralised here
-// so renames and additions happen in one place. Routing decisions live in the
-// tool handlers, not here.
+// These map to Runway's API `model` strings exactly. Centralised here so
+// renames happen in one place. Routing decisions live in the tool handlers.
+// ALL generation goes through Runway — no other provider is wired in.
 
 export const RUNWAY_MODELS = {
   // ---- Image ----
-  GPT_IMAGE_2: "gpt_image_2", // text-to-image + edit-with-input_images. Resolutions WIDTHxHEIGHT divisible by 16, ratio 1:3 to 3:1.
-  GEN4_IMAGE: "gen4_image", // up to 3 reference images. 5 cr (720p) / 8 cr (1080p).
-  GEN4_IMAGE_TURBO: "gen4_image_turbo", // requires reference images. 2 cr.
+  GPT_IMAGE_2_5: "gpt_image_2_5_sunburst", // quality model. ≤16 refs (tagged), 30 ratios across 1K/2K/4K, transparent bg.
+  GPT_IMAGE_2_5_FLARE: "gpt_image_2_5_flare", // fast model, GPT Image 2 quality. Same params minus transparent bg.
 
   // ---- Video ----
-  SEEDANCE_2: "seedance2", // t2v + i2v. up to 9 image refs, 3 video refs, 3 audio refs. 5-15s integer. 36 cr/s.
-  GEN_4_5: "gen4.5", // t2v + i2v. 12 cr/s. Default character workhorse.
-  GEN_4_TURBO: "gen4_turbo", // i2v only. 5 cr/s.
-  GEN_4_ALEPH: "gen4_aleph", // v2v. 5s MAX. 15 cr/s.
-  ACT_TWO: "act_two", // performance capture v2v. 5 cr/s.
+  // Seedance 2.5 is the ONLY video model: t2v + i2v + v2v (reference / extend /
+  // edit). 4–30s, native audio, ≤30 image / 10 video / 10 audio refs, 480p–1080p.
+  SEEDANCE_2_5: "seedance2_5",
+
+  // ---- Finish ----
+  VIDEO_UPSCALE: "magnific_video_upscaler_creative", // 720p→4K, optional fps boost.
 
   // ---- Audio ----
-  ELEVEN_TTS: "eleven_multilingual_v2",
-  ELEVEN_SOUND: "eleven_text_to_sound_v2",
-  ELEVEN_DUBBING: "eleven_voice_dubbing",
-  ELEVEN_ISOLATION: "eleven_voice_isolation",
-  ELEVEN_STS: "eleven_multilingual_sts_v2",
-  ELEVEN_TTV_V3: "eleven_ttv_v3", // text-to-voice for custom voice design
-
-  // ---- Real-time ----
-  CHARACTERS: "gwm1_avatars",
+  ELEVEN_TTS: "eleven_v3", // expressive TTS — supports [whispers] / [laughs] tags, stability, speed.
+  ELEVEN_SOUND: "eleven_text_to_sound_v2", // ambient beds + SFX, 0.5–30s, loopable.
+  SEED_AUDIO: "seed_audio", // text-to-audio: music, scene audio. 0.25 cr/s.
 } as const;
 
 export type RunwayModelId = (typeof RUNWAY_MODELS)[keyof typeof RUNWAY_MODELS];

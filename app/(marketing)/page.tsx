@@ -104,7 +104,7 @@ function InsideStudioSection() {
           label: "Casting",
           title: "Cast your director.",
           body:
-            "Twenty fictional auteurs, each with a school of cinema, a voice, and a body of work. Pick one or two — they show up as talking-head avatars and direct with you in real time.",
+            "Twenty fictional auteurs, each with a school of cinema and a body of work. Pick one or two — they direct the film with you from pitch to premiere.",
           meta: "01 · Cast",
           poster: "/directors/yuki-sato.png",
         },
@@ -375,7 +375,7 @@ function ManifestoSection() {
 }
 
 /* =========================================================================
-   CASTING — featured director personas (talking-head avatars in product)
+   CASTING — featured director personas
    ========================================================================= */
 function CastingSection() {
   return (
@@ -549,7 +549,7 @@ function MethodSection() {
       hint: "Lobby · lead · co-director",
       image: "/method/01-casting.png",
       desc:
-        "Pick one director or two. Each is a fictional auteur with a school, a voice and a body of cinema cited. They show up as talking-head avatars and stay with you from pitch to wrap.",
+        "Pick one director or two. Each is a fictional auteur with a school and a body of cinema cited. They stay with you from pitch to wrap.",
     },
     {
       n: "02",
@@ -781,9 +781,9 @@ function SplitFeatureSection() {
           </Reveal>
           <Reveal delay={0.1}>
             <p className="mt-6 max-w-md font-serif text-[16px] leading-[1.7] text-white/70">
-              Your director is a talking-head avatar, live on screen — pitching, blocking,
-              calling lens choices, teaching the school as you go. Casting, treatment,
-              shotlist, cut — one workspace, no plugins, no exports.
+              Your director writes the treatment, locks the cast, composes every
+              keyframe and shoots 25-second scenes with native sound. Casting,
+              treatment, scenes, cut, 4K master — one workspace, no plugins, no exports.
             </p>
           </Reveal>
           <Stagger className="mt-10 space-y-4">

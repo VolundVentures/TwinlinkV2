@@ -1,7 +1,6 @@
 import type { ToolDefinition, ToolHandler, ToolResult } from "./types";
 import { getNextVariantNumber } from "./types";
 import { renderComposition } from "@/lib/generation/remotion-render";
-import { transcribeAudio } from "@/lib/generation/transcription";
 import { db } from "@/lib/db";
 import type { AdCompositionProps, CaptionWord } from "@/remotion/lib/types";
 
@@ -11,11 +10,11 @@ export const composeVideoDefinition: ToolDefinition = {
     "Compose the final cut from the shots.\n\n" +
     "**EASIEST PATH — for each clip just pass `shot_id` and `duration_seconds`. The tool auto-resolves the rendered video URL from the DB.** If the shot has no rendered video, the tool falls back to the hero keyframe as an image_clip (so a still is held for the shot's duration). The `url` field is optional — only set it if you specifically want to use a URL outside the project's assets.\n\n" +
     "**ALWAYS pass `aspect_ratio` to match the user-chosen film spec from the director's context** — do not rely on defaults.\n\n" +
-    "**Audio architecture — 3 layers, all optional, all loaded with separate URLs:**\n" +
-    "- `voiceover_url` (VO via Runway → ElevenLabs `generate_voiceover`) — 0.85 volume, primary dialog.\n" +
-    "- `background_music_url` (Suno via `generate_music`) — 0.15 volume, melodic bed.\n" +
-    "- `ambient_sound_url` (Runway → ElevenLabs `generate_ambient`) — 0.18 volume, location texture. Loops if shorter than film. Adds enormous realism — use for ANY film with a real location.\n" +
-    "Clips themselves are silent (has_own_audio=false). For the rare lipsync shot, set is_lipsync=true on that clip.\n\n" +
+    "**Audio architecture — scenes carry NATIVE audio (Seedance 2.5: dialogue, foley, ambience), plus up to 3 optional layers:**\n" +
+    "- `voiceover_url` (Runway → ElevenLabs `generate_voiceover`) — 0.85 volume, narration. Scene audio ducks to 0.5 beneath it.\n" +
+    "- `background_music_url` (Runway seed_audio via `generate_music`) — 0.15 volume, score.\n" +
+    "- `ambient_sound_url` (Runway → ElevenLabs `generate_ambient`) — 0.18 volume, extra room tone. Usually unnecessary now that scenes have native sound; use when the film needs one continuous bed across cuts.\n" +
+    "Every Seedance scene has has_own_audio=true (the default). Set is_lipsync=true on a scene whose spoken dialogue must play at full volume with VO muted.\n\n" +
     "**Transitions:** hard cut by default. Use crossfade (0.5-1s) only when the film is slow/luxury and the director calls for it.\n\n" +
     "**Captions: OFF by default.** Never enable unless user explicitly requests.\n\n" +
     "Costs 5 credits.",
@@ -56,7 +55,7 @@ export const composeVideoDefinition: ToolDefinition = {
             has_own_audio: {
               type: "boolean",
               description:
-                "Optional. True if the video clip was generated with baked-in audio (rare in the current pipeline). Defaults to false.",
+                "Optional. Seedance scenes carry native audio — defaults to TRUE. Set false only for a scene rendered with audio=false or an image_clip.",
             },
             is_lipsync: {
               type: "boolean",
@@ -121,7 +120,7 @@ export const composeVideoDefinition: ToolDefinition = {
           required: ["text", "start_seconds", "end_seconds"],
         },
         description:
-          "PREFERRED over Whisper transcription. Provide timed caption segments from the script. Each segment becomes a caption group. The agent already has the script text — use it directly instead of relying on audio transcription which introduces errors.",
+          "Provide timed caption segments from the script. Provide timed caption segments from the script. Each segment becomes a caption group. The agent already has the script text — use it directly instead of relying on audio transcription which introduces errors.",
       },
       transition: {
         type: "string",
@@ -356,7 +355,7 @@ export const composeVideoTool: ToolHandler = async (
   }
 
   // Pre-compose validation — WARN on missing music but don't block
-  // Blocking caused deadlocks when Suno was down — better to have video without music than no video
+  // Blocking caused deadlocks when the score failed — better to have video without music than no video
   if (!backgroundMusicUrl) {
     console.warn("[tool:compose_video] WARNING: No background_music_url. Video will have no background music.");
   }
@@ -403,22 +402,12 @@ export const composeVideoTool: ToolHandler = async (
         type: (clip.type ?? "video") as "video" | "image",
         durationFrames: Math.round((clip.duration_seconds || 5) * fps),
         label: clip.label || "clip",
-        hasOwnAudio: clip.has_own_audio === true,
+        hasOwnAudio: clip.has_own_audio !== false && (clip.type ?? "video") === "video",
         isLipsync: clip.is_lipsync === true,
       };
     });
 
-    console.log("[tool:compose_video] Clip order (after shot_id sort):", compositionClips.map((c) => `${c.label}(${c.hasOwnAudio ? "talk" : "broll"})`).join(" → "));
-
-    // VOICEOVER START: Always frame 0.
-    // The Remotion composition already mutes voiceover during has_own_audio clips
-    // via the avatarFrameRanges volume function. No need to delay the start.
-    const voiceoverStartFrame = 0;
-
-    // Log audio routing for debugging
-    const avatarClipCount = compositionClips.filter(c => c.hasOwnAudio).length;
-    const brollClipCount = compositionClips.filter(c => !c.hasOwnAudio).length;
-    console.log(`[tool:compose_video] Audio routing: ${avatarClipCount} avatar clips, ${brollClipCount} B-roll clips, VO starts at frame ${voiceoverStartFrame}`);
+    console.log("[tool:compose_video] Clip order (after shot_id sort):", compositionClips.map((c) => `${c.label}(${c.hasOwnAudio ? "native-audio" : "silent"})`).join(" → "));
 
     const compositionProps: AdCompositionProps = {
       clips: compositionClips,
@@ -496,11 +485,11 @@ export const composeVideoTool: ToolHandler = async (
       }));
     }
 
-    // Generate captions — prefer script segments over Whisper transcription
+    // Generate captions — script segments only
     let captionWords: CaptionWord[] | undefined;
     if (addCaptions) {
       if (captionSegments && captionSegments.length > 0) {
-        // PREFERRED: Use script-based captions (no Whisper needed)
+        // PREFERRED: Use script-based captions 
         // Convert script segments into word-level captions
         emitter.send("tool_progress", {
           tool: "compose_video",
@@ -526,28 +515,6 @@ export const composeVideoTool: ToolHandler = async (
         }
         compositionProps.captions = captionWords;
         console.log(`[tool:compose_video] Script-based captions: ${captionWords.length} words from ${captionSegments.length} segments`);
-      } else if (voiceoverUrl) {
-        // FALLBACK: Whisper transcription
-        emitter.send("tool_progress", {
-          tool: "compose_video",
-          generationId: context.generationId,
-          status: "generating",
-          message: "Transcribing speech for captions...",
-        });
-
-        try {
-          const transcription = await transcribeAudio(voiceoverUrl, {
-            generationId: context.generationId,
-          });
-          captionWords = transcription.words.map((w) => ({
-            ...w,
-            startMs: w.startMs,
-            endMs: w.endMs,
-          }));
-          compositionProps.captions = captionWords;
-        } catch (err) {
-          console.warn("[tool:compose_video] Caption transcription failed:", err);
-        }
       }
     }
 

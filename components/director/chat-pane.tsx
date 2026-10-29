@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
 import { MentionInput, type MentionOption } from "./mention-input";
 import { AttachButton } from "./attach-button";
-import { FilmSchoolButton } from "./film-school";
 import type { ChatMessage, ToolActivity } from "./director-types";
 
 const STAGE_LABELS: Record<string, string> = {
@@ -30,8 +29,6 @@ export function ChatPane({
   spec,
   mentions,
   phase,
-  lessonCount,
-  onOpenFilmSchool,
 }: {
   messages: ChatMessage[];
   activity: ToolActivity[];
@@ -44,8 +41,6 @@ export function ChatPane({
   mentions: MentionOption[];
   /** AUTEUR — current room (PITCH / SCRIPT / WORLD / ...). */
   phase?: string;
-  lessonCount?: number;
-  onOpenFilmSchool?: () => void;
 }) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,12 +75,6 @@ export function ChatPane({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {onOpenFilmSchool && (
-              <FilmSchoolButton
-                count={lessonCount || 0}
-                onOpen={onOpenFilmSchool}
-              />
-            )}
             <span
               className={cn(
                 "border px-2 py-1 font-mono text-[12px] uppercase tracking-[0.18em]",

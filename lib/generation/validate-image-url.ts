@@ -1,8 +1,8 @@
 /**
  * Pre-flight check that a URL actually resolves to an image BEFORE we send
- * it to Replicate as a reference. Catches the #1 failure mode from the
+ * it to Runway as a reference. Catches the #1 failure mode from the
  * field: the agent (or user) paste a webpage URL, a CDN-protected URL, or
- * a URL behind Cloudflare bot-check. Replicate fetches it server-side,
+ * a URL behind Cloudflare bot-check. Runway fetches it server-side,
  * gets a 403/HTML, and the prediction fails — burning time and credits.
  *
  * Strategy:
@@ -10,7 +10,7 @@
  *      type starting with `image/`, we're good.
  *   2. If HEAD is disallowed (405) or returns no content-type, fall back
  *      to a tiny ranged GET (first 512 bytes) to sniff the magic bytes.
- *   3. Supabase/Replicate storage URLs are trusted without a round trip.
+ *   3. Supabase/Runway storage URLs are trusted without a round trip.
  *   4. Never throws — always returns a { ok, reason } so callers can
  *      compose clean agent-visible error messages.
  */
